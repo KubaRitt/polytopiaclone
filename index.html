@@ -204,24 +204,28 @@ input::placeholder { color: #6f929b; }
 .sheet .shead { display: flex; align-items: center; margin-bottom: 10px; }
 .sheet .shead h2 { margin: 0; font-size: 24px; }
 .sheet .shead .close { margin-left: auto; }
-.techgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 620px) { .techgrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
-.branch { display: flex; flex-direction: column; gap: 6px; }
-.branch + .branch { }
+.techtree { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .techtree { grid-template-columns: 1fr; } }
+.branch { display: flex; flex-direction: column; gap: 8px; background: rgba(10,37,50,.5); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+.twigs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; position: relative; }
+.twigs::before { content: ''; position: absolute; left: 25%; right: 25%; top: -8px; height: 8px; border: 2px solid rgba(246,231,191,.25); border-bottom: 0; border-radius: 6px 6px 0 0; }
+.twig { display: flex; flex-direction: column; gap: 6px; }
 .tech {
-  border: 2px solid #2b5b6e; background: #0d2e3e; border-radius: 12px; padding: 8px 10px; text-align: left;
-  display: flex; flex-direction: column; line-height: 1.2;
+  border: 2px solid #2b5b6e; background: #0d2e3e; border-radius: 12px; padding: 7px 9px; text-align: left;
+  display: flex; flex-direction: column; line-height: 1.15; min-width: 0;
 }
 .tech b { font-size: 15px; }
-.tech span { font-size: 13px; color: #a9c6cc; }
-.tech em { font-style: normal; font-weight: 700; font-size: 14px; margin-top: 3px; color: #ffd34d; }
+.tech span { font-size: 12px; color: #a9c6cc; }
+.tech em { font-style: normal; font-weight: 700; font-size: 13px; margin-top: 3px; color: #ffd34d; }
 .tech.known { background: #2c5a2a; border-color: var(--leaf); }
 .tech.known em { color: #d2f5b8; }
 .tech.locked { opacity: 0.5; }
-.tech.open:not(:disabled) { border-color: var(--sand); }
+.tech.open:not(:disabled) { border-color: var(--sand); box-shadow: 0 0 0 2px rgba(246,231,191,.15); }
 .tech:disabled { cursor: default; }
 .tech.open:disabled em { color: #a9c6cc; }
-.branch .tech:nth-child(n+2) { margin-left: 8px; }
+.tech.tier1 b { font-size: 16px; }
+.skills { display: flex; flex-wrap: wrap; gap: 5px; margin: -4px 0 10px; }
+.skill { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #28506a; color: #d8eef2; }
 .rewards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .reward { border: 0; border-radius: 16px; padding: 14px; background: var(--sand); color: var(--ink); text-align: left; box-shadow: 0 4px 0 var(--sand-2); }
 .reward b { display: block; font-size: 19px; }
@@ -316,6 +320,12 @@ input::placeholder { color: #6f929b; }
         </label>
         <label>Your tribe <select id="newTribe"></select></label>
       </div>
+      <label>Game mode
+        <select id="newMode">
+          <option value="domination">Domination: capture every rival city</option>
+          <option value="perfection">Perfection: best score after 30 rounds</option>
+        </select>
+      </label>
       <button class="btn primary big" id="btnCreate">Create game</button>
     </div>
   </div>
@@ -374,75 +384,127 @@ window.TESSEL_CONFIG = {
 };
 </script>
 <script>
-// Tessel rules engine. Pure functions over a JSON game state.
-// Every client runs the same code, so the same actions give the same result.
+// Tessel rules engine v2. Pure functions over a JSON game state.
 (function (root) {
   'use strict';
 
   const TRIBES = {
-    horn:  { name: 'Hornwood',    color: '#e0574b', tech: 'hunting',  bias: 'forest',   blurb: 'Forest hunters' },
-    reed:  { name: 'Reedfolk',    color: '#3fa7d6', tech: 'fishing',  bias: 'water',    blurb: 'Lagoon fishers' },
-    plain: { name: 'Plainriders', color: '#efb02c', tech: 'riding',   bias: 'field',    blurb: 'Grassland riders' },
-    stone: { name: 'Stoneborn',   color: '#9b6bd6', tech: 'climbing', bias: 'mountain', blurb: 'Highland climbers' },
+    horn:  { name: 'Hornwood',    color: '#e0574b', tech: 'hunting',      unit: 'warrior', bias: 'forest',   blurb: 'Forest hunters' },
+    reed:  { name: 'Reedfolk',    color: '#3fa7d6', tech: 'fishing',      unit: 'warrior', bias: 'water',    blurb: 'Lagoon fishers' },
+    plain: { name: 'Plainriders', color: '#efb02c', tech: 'riding',       unit: 'rider',   bias: 'field',    blurb: 'Grassland riders' },
+    stone: { name: 'Stoneborn',   color: '#9b6bd6', tech: 'climbing',     unit: 'warrior', bias: 'mountain', blurb: 'Highland climbers' },
+    grove: { name: 'Grovekin',    color: '#56b84a', tech: 'organization', unit: 'warrior', bias: 'fruit',    blurb: 'Orchard keepers' },
+    mesa:  { name: 'Mesaclan',    color: '#dd7f35', tech: 'farming',      unit: 'warrior', bias: 'crop',     blurb: 'Terrace farmers' },
+    frost: { name: 'Frostmark',   color: '#e8eef2', tech: 'strategy',     unit: 'warrior', bias: 'mountain', blurb: 'Tundra wardens' },
+    dusk:  { name: 'Duskweald',   color: '#3b4aa0', tech: 'archery',      unit: 'warrior', bias: 'forest',   blurb: 'Night archers' },
   };
-  const TRIBE_ORDER = ['horn', 'reed', 'plain', 'stone'];
+  const TRIBE_ORDER = ['horn', 'reed', 'plain', 'stone', 'grove', 'mesa', 'frost', 'dusk'];
 
   const TECHS = {
-    climbing:     { name: 'Climbing',     tier: 1, req: null,           desc: 'Move onto mountains' },
-    mining:       { name: 'Mining',       tier: 2, req: 'climbing',     desc: 'Build mines on ore' },
-    smithery:     { name: 'Smithery',     tier: 3, req: 'mining',       desc: 'Train swordsmen' },
-    fishing:      { name: 'Fishing',      tier: 1, req: null,           desc: 'Catch fish, sail shallow water' },
-    sailing:      { name: 'Sailing',      tier: 2, req: 'fishing',      desc: 'Sail the open ocean' },
-    hunting:      { name: 'Hunting',      tier: 1, req: null,           desc: 'Hunt wild game' },
-    archery:      { name: 'Archery',      tier: 2, req: 'hunting',      desc: 'Train archers' },
-    organization: { name: 'Organization', tier: 1, req: null,           desc: 'Gather wild fruit' },
-    farming:      { name: 'Farming',      tier: 2, req: 'organization', desc: 'Build farms on crops' },
-    shields:      { name: 'Shields',      tier: 2, req: 'organization', desc: 'Train defenders' },
-    riding:       { name: 'Riding',       tier: 1, req: null,           desc: 'Train riders' },
-    chivalry:     { name: 'Chivalry',     tier: 3, req: 'riding',       desc: 'Train knights' },
+    riding:       { name: 'Riding',       tier: 1, req: null,           unlocks: 'Rider' },
+    roads:        { name: 'Roads',        tier: 2, req: 'riding',       unlocks: 'Roads, Grand Bazaar' },
+    trade:        { name: 'Trade',        tier: 3, req: 'roads',        unlocks: 'Market, Emperor’s Tomb' },
+    freespirit:   { name: 'Free Spirit',  tier: 2, req: 'riding',       unlocks: 'Temple, Disband' },
+    chivalry:     { name: 'Chivalry',     tier: 3, req: 'freespirit',   unlocks: 'Knight, Gate of Power' },
+    organization: { name: 'Organization', tier: 1, req: null,           unlocks: 'Gather fruit' },
+    farming:      { name: 'Farming',      tier: 2, req: 'organization', unlocks: 'Farm' },
+    construction: { name: 'Construction', tier: 3, req: 'farming',      unlocks: 'Windmill, Burn forest, Park of Fortune' },
+    strategy:     { name: 'Strategy',     tier: 2, req: 'organization', unlocks: 'Defender' },
+    diplomacy:    { name: 'Diplomacy',    tier: 3, req: 'strategy',     unlocks: 'See every capital' },
+    climbing:     { name: 'Climbing',     tier: 1, req: null,           unlocks: 'Mountains: move and defend' },
+    mining:       { name: 'Mining',       tier: 2, req: 'climbing',     unlocks: 'Mine' },
+    smithery:     { name: 'Smithery',     tier: 3, req: 'mining',       unlocks: 'Swordsman, Forge' },
+    meditation:   { name: 'Meditation',   tier: 2, req: 'climbing',     unlocks: 'Mountain temple, Altar of Peace' },
+    philosophy:   { name: 'Philosophy',   tier: 3, req: 'meditation',   unlocks: 'Mind Bender, Tower of Wisdom, cheaper tech' },
+    fishing:      { name: 'Fishing',      tier: 1, req: null,           unlocks: 'Fish, Port' },
+    whaling:      { name: 'Whaling',      tier: 2, req: 'fishing',      unlocks: 'Hunt whales' },
+    aquatism:     { name: 'Aquatism',     tier: 3, req: 'whaling',      unlocks: 'Water temple, water defence' },
+    sailing:      { name: 'Sailing',      tier: 2, req: 'fishing',      unlocks: 'Ship, ocean travel' },
+    navigation:   { name: 'Navigation',   tier: 3, req: 'sailing',      unlocks: 'Battleship, starfish, Eye of God' },
+    hunting:      { name: 'Hunting',      tier: 1, req: null,           unlocks: 'Hunt animals' },
+    archery:      { name: 'Archery',      tier: 2, req: 'hunting',      unlocks: 'Archer, forest defence' },
+    spiritualism: { name: 'Spiritualism', tier: 3, req: 'archery',      unlocks: 'Forest temple, Grow forest' },
+    forestry:     { name: 'Forestry',     tier: 2, req: 'hunting',      unlocks: 'Lumber hut, Clear forest' },
+    mathematics:  { name: 'Mathematics',  tier: 3, req: 'forestry',     unlocks: 'Catapult, Sawmill' },
   };
   const BRANCHES = [
-    ['organization', 'farming', 'shields'],
-    ['hunting', 'archery'],
-    ['riding', 'chivalry'],
-    ['climbing', 'mining', 'smithery'],
-    ['fishing', 'sailing'],
+    ['riding', ['roads', 'trade'], ['freespirit', 'chivalry']],
+    ['organization', ['farming', 'construction'], ['strategy', 'diplomacy']],
+    ['climbing', ['mining', 'smithery'], ['meditation', 'philosophy']],
+    ['fishing', ['whaling', 'aquatism'], ['sailing', 'navigation']],
+    ['hunting', ['archery', 'spiritualism'], ['forestry', 'mathematics']],
   ];
 
   const UNITS = {
-    warrior:   { name: 'Warrior',   cost: 2, hp: 10, atk: 2,   def: 2, mv: 1, rng: 1, tech: null },
-    rider:     { name: 'Rider',     cost: 3, hp: 10, atk: 2,   def: 1, mv: 2, rng: 1, tech: 'riding' },
-    archer:    { name: 'Archer',    cost: 3, hp: 10, atk: 2,   def: 1, mv: 1, rng: 2, tech: 'archery' },
-    defender:  { name: 'Defender',  cost: 3, hp: 15, atk: 1,   def: 3, mv: 1, rng: 1, tech: 'shields' },
-    swordsman: { name: 'Swordsman', cost: 5, hp: 15, atk: 3,   def: 3, mv: 1, rng: 1, tech: 'smithery' },
-    knight:    { name: 'Knight',    cost: 8, hp: 10, atk: 3.5, def: 1, mv: 3, rng: 1, tech: 'chivalry' },
-    giant:     { name: 'Giant',     cost: 0, hp: 40, atk: 5,   def: 4, mv: 1, rng: 1, tech: null, special: true },
+    warrior:    { name: 'Warrior',     cost: 2,  hp: 10, atk: 2,   def: 2, mv: 1, rng: 1, tech: null,          skills: ['dash', 'fortify'] },
+    rider:      { name: 'Rider',       cost: 3,  hp: 10, atk: 2,   def: 1, mv: 2, rng: 1, tech: 'riding',      skills: ['dash', 'escape', 'fortify'] },
+    archer:     { name: 'Archer',      cost: 3,  hp: 10, atk: 2,   def: 1, mv: 1, rng: 2, tech: 'archery',     skills: ['dash', 'fortify'] },
+    defender:   { name: 'Defender',    cost: 3,  hp: 15, atk: 1,   def: 3, mv: 1, rng: 1, tech: 'strategy',    skills: ['fortify'] },
+    swordsman:  { name: 'Swordsman',   cost: 5,  hp: 15, atk: 3,   def: 3, mv: 1, rng: 1, tech: 'smithery',    skills: ['dash'] },
+    catapult:   { name: 'Catapult',    cost: 8,  hp: 10, atk: 4,   def: 0, mv: 1, rng: 3, tech: 'mathematics', skills: [] },
+    knight:     { name: 'Knight',      cost: 8,  hp: 10, atk: 3.5, def: 1, mv: 3, rng: 1, tech: 'chivalry',    skills: ['dash', 'persist', 'fortify'] },
+    mindbender: { name: 'Mind Bender', cost: 5,  hp: 10, atk: 0,   def: 1, mv: 1, rng: 1, tech: 'philosophy',  skills: ['heal', 'convert'] },
+    giant:      { name: 'Giant',       cost: 20, hp: 40, atk: 5,   def: 4, mv: 1, rng: 1, tech: null,          skills: ['dash'], special: true },
   };
-  const TRAINABLE = ['warrior', 'rider', 'archer', 'defender', 'swordsman', 'knight'];
-  const BOAT = { atk: 1, def: 1, mv: 2, rng: 2 };
+  const TRAINABLE = ['warrior', 'rider', 'archer', 'defender', 'swordsman', 'catapult', 'knight', 'mindbender'];
+  const BOATS = {
+    boat:       { name: 'Boat',       atk: 1, def: 1, mv: 2, rng: 2, ocean: false, skills: ['dash', 'carry'] },
+    ship:       { name: 'Ship',       atk: 2, def: 2, mv: 3, rng: 2, ocean: true,  skills: ['dash', 'carry'], cost: 5, tech: 'sailing', from: 'boat' },
+    battleship: { name: 'Battleship', atk: 4, def: 3, mv: 3, rng: 2, ocean: true,  skills: ['dash', 'carry', 'scout'], cost: 15, tech: 'navigation', from: 'ship' },
+  };
+  const SKILL_INFO = {
+    dash: 'Dash: can attack after moving', escape: 'Escape: can move after attacking', persist: 'Persist: attacks again after a kill',
+    fortify: 'Fortify: extra defence in own cities', heal: 'Heal: restores nearby friends', convert: 'Convert: turns an enemy to your side',
+    carry: 'Carry: transports a land unit', scout: 'Scout: sees two tiles away',
+  };
 
   const HARVEST = {
-    fruit: { name: 'Gather fruit', cost: 2, tech: 'organization', pop: 1, becomes: null },
-    game:  { name: 'Hunt',         cost: 2, tech: 'hunting',      pop: 1, becomes: null },
-    fish:  { name: 'Fish',         cost: 2, tech: 'fishing',      pop: 1, becomes: null },
-    crop:  { name: 'Build farm',   cost: 5, tech: 'farming',      pop: 2, becomes: 'farm' },
-    ore:   { name: 'Build mine',   cost: 5, tech: 'mining',       pop: 2, becomes: 'mine' },
+    fruit:    { name: 'Gather fruit',     tech: 'organization', cost: 2, pop: 1 },
+    game:     { name: 'Hunt',             tech: 'hunting',      cost: 2, pop: 1 },
+    fish:     { name: 'Fish',             tech: 'fishing',      cost: 2, pop: 1 },
+    whale:    { name: 'Hunt whale',       tech: 'whaling',      cost: 0, gain: 10 },
+    starfish: { name: 'Collect starfish', tech: 'navigation',   cost: 0, gain: 8 },
   };
 
-  const REWARDS = { 2: ['workshop', 'explorer'], 3: ['wall', 'stars'], 4: ['border', 'pop'], 5: ['park', 'giant'] };
+  const isWater = (t) => t === 'water' || t === 'ocean';
+  const emptyField = (T) => T.t === 'field' && !T.r && !T.b && !T.city && !T.ruin;
+  const BUILDINGS = {
+    farm:           { name: 'Farm',            tech: 'farming',      cost: 5,  pop: 2, on: (T) => T.t === 'field' && T.r === 'crop' && !T.b },
+    mine:           { name: 'Mine',            tech: 'mining',       cost: 5,  pop: 2, on: (T) => T.t === 'mountain' && T.r === 'ore' && !T.b },
+    lumber:         { name: 'Lumber hut',      tech: 'forestry',     cost: 2,  pop: 1, on: (T) => T.t === 'forest' && !T.r && !T.b && !T.ruin },
+    port:           { name: 'Port',            tech: 'fishing',      cost: 10, pop: 1, on: (T) => T.t === 'water' && !T.r && !T.b && !T.ruin },
+    sawmill:        { name: 'Sawmill',         tech: 'mathematics',  cost: 5,  adj: 'lumber', per: 1, unique: true, on: emptyField },
+    windmill:       { name: 'Windmill',        tech: 'construction', cost: 5,  adj: 'farm',   per: 1, unique: true, on: emptyField },
+    forge:          { name: 'Forge',           tech: 'smithery',     cost: 5,  adj: 'mine',   per: 2, unique: true, on: emptyField },
+    market:         { name: 'Market',          tech: 'trade',        cost: 5,  unique: true, on: emptyField },
+    temple:         { name: 'Temple',          tech: 'freespirit',   cost: 20, pop: 1, temple: true, on: emptyField },
+    foresttemple:   { name: 'Forest temple',   tech: 'spiritualism', cost: 15, pop: 1, temple: true, on: (T) => T.t === 'forest' && !T.r && !T.b && !T.ruin },
+    mountaintemple: { name: 'Mountain temple', tech: 'meditation',   cost: 20, pop: 1, temple: true, on: (T) => T.t === 'mountain' && !T.r && !T.b && !T.ruin },
+    watertemple:    { name: 'Water temple',    tech: 'aquatism',     cost: 20, pop: 1, temple: true, on: (T) => isWater(T.t) && !T.r && !T.b && !T.ruin },
+    altar:          { name: 'Altar of Peace',  tech: 'meditation',   cost: 0, pop: 3, monument: 'No attacks for 5 turns', on: emptyField },
+    tower:          { name: 'Tower of Wisdom', tech: 'philosophy',   cost: 0, pop: 3, monument: 'Learn every technology', on: emptyField },
+    tomb:           { name: 'Emperor’s Tomb',  tech: 'trade',        cost: 0, pop: 3, monument: 'Hold 100 stars', on: emptyField },
+    eye:            { name: 'Eye of God',      tech: 'navigation',   cost: 0, pop: 3, monument: 'Explore the whole map', on: emptyField },
+    gate:           { name: 'Gate of Power',   tech: 'chivalry',     cost: 0, pop: 3, monument: 'Defeat 10 enemy units', on: emptyField },
+    bazaar:         { name: 'Grand Bazaar',    tech: 'roads',        cost: 0, pop: 3, monument: 'Connect 5 cities to your capital', on: emptyField },
+    fortune:        { name: 'Park of Fortune', tech: 'construction', cost: 0, pop: 3, monument: 'Grow a city to level 5', on: emptyField },
+  };
+  const BUILD_ORDER = ['farm', 'mine', 'lumber', 'port', 'sawmill', 'windmill', 'forge', 'market', 'temple', 'foresttemple', 'mountaintemple', 'watertemple', 'altar', 'tower', 'tomb', 'eye', 'gate', 'bazaar', 'fortune'];
+
+  const REWARDS = { 2: ['workshop', 'explorer'], 3: ['wall', 'stars'], 4: ['pop', 'border'], 5: ['park', 'giant'] };
   const REWARD_INFO = {
     workshop: { name: 'Workshop',        desc: '+1 star every turn' },
-    explorer: { name: 'Explorer',        desc: 'Reveal the land around the city' },
-    wall:     { name: 'City wall',       desc: 'Units defending here get 4× defence' },
-    stars:    { name: 'Treasury',        desc: '+5 stars right now' },
+    explorer: { name: 'Explorer',        desc: 'Scouts 15 tiles of unknown land' },
+    wall:     { name: 'City wall',       desc: 'Fortified units here get 4× defence' },
+    stars:    { name: 'Resources',       desc: '+5 stars right now' },
+    pop:      { name: 'Population growth', desc: '+3 population' },
     border:   { name: 'Border growth',   desc: 'Claim a wider ring of land' },
-    pop:      { name: 'Population boom', desc: '+3 population' },
-    park:     { name: 'Park',            desc: '+250 score' },
-    giant:    { name: 'Giant',           desc: 'A huge unit joins the city' },
+    park:     { name: 'Park',            desc: '+1 star every turn, +250 score' },
+    giant:    { name: 'Super unit',      desc: 'A Giant joins the city' },
   };
 
   const TERRAIN_NAME = { field: 'Field', forest: 'Forest', mountain: 'Mountain', water: 'Shallow water', ocean: 'Ocean' };
-  const RESOURCE_NAME = { fruit: 'Wild fruit', game: 'Wild game', crop: 'Crops', fish: 'Fish', ore: 'Ore', farm: 'Farm', mine: 'Mine' };
+  const RESOURCE_NAME = { fruit: 'Wild fruit', game: 'Wild animal', crop: 'Crops', fish: 'Fish', ore: 'Metal', whale: 'Whale', starfish: 'Starfish' };
 
   // ---------- helpers ----------
   function mulberry32(a) {
@@ -453,7 +515,6 @@ window.TESSEL_CONFIG = {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  const isWater = (t) => t === 'water' || t === 'ocean';
   function dist(N, a, b) {
     return Math.max(Math.abs((a % N) - (b % N)), Math.abs(Math.floor(a / N) - Math.floor(b / N)));
   }
@@ -472,13 +533,28 @@ window.TESSEL_CONFIG = {
   const colorOf = (s, slot) => { const p = P(s, slot); return p ? TRIBES[p.tribe].color : '#8a949c'; };
   const tileOwner = (s, i) => { const c = s.tiles[i].terr; return c != null && s.cities[c] ? s.cities[c].owner : null; };
   const isExplored = (s, slot, i) => { const p = P(s, slot); return !p || p.explored[i] === '1'; };
-  const visionR = (s, i) => (s.tiles[i].t === 'mountain' ? 2 : 1);
+  const citiesOf = (s, slot) => Object.values(s.cities).filter((c) => c.owner === slot);
+  const capitalOf = (s, slot) => citiesOf(s, slot).find((c) => c.capital) || null;
+  function rng(s) { s.rs = (s.rs + 1) | 0; return mulberry32(s.seed * 31 + s.rs * 7919)(); }
 
+  function ev(s, e) {
+    s.seq = (s.seq || 0) + 1;
+    e.seq = s.seq; e.slot = s.turnSlot;
+    s.events.push(e);
+    if (s.events.length > 160) s.events.splice(0, s.events.length - 160);
+    return e;
+  }
   function reveal(s, slot, center, r) {
     const p = P(s, slot); if (!p) return;
     const a = p.explored.split('');
     a[center] = '1';
     for (const j of around(s.size, center, r)) a[j] = '1';
+    p.explored = a.join('');
+  }
+  function revealTiles(s, slot, list) {
+    const p = P(s, slot); if (!p || !list.length) return;
+    const a = p.explored.split('');
+    for (const j of list) a[j] = '1';
     p.explored = a.join('');
   }
 
@@ -531,7 +607,7 @@ window.TESSEL_CONFIG = {
       return val - 0.25 * d * d;
     });
     const thr = score.slice().sort((a, b) => a - b)[Math.floor(N * N * 0.38)];
-    const land = score.map((s) => s > thr);
+    const land = score.map((x) => x > thr);
     caps.forEach((c) => { land[c] = true; for (const j of around(N, c, 2)) land[j] = true; });
     caps.forEach((c, k) => {
       if (TRIBES[roster[k].tribe].bias !== 'water') return;
@@ -540,68 +616,71 @@ window.TESSEL_CONFIG = {
 
     const tiles = [];
     for (let i = 0; i < N * N; i++) {
-      if (!land[i]) { tiles.push({ t: 'ocean', r: null, terr: null, city: null }); continue; }
-      let bias = null;
-      caps.forEach((c, k) => { if (dist(N, c, i) <= 3) bias = TRIBES[roster[k].tribe].bias; });
-      let pF = 0.48, pW = 0.32;
-      if (bias === 'forest') { pF = 0.34; pW = 0.5; }
-      if (bias === 'mountain') { pF = 0.4; pW = 0.24; }
-      if (bias === 'field') { pF = 0.62; pW = 0.26; }
-      const r = rnd();
-      tiles.push({ t: r < pF ? 'field' : r < pF + pW ? 'forest' : 'mountain', r: null, terr: null, city: null });
+      const T = { t: 'ocean', r: null, b: null, bl: 0, bt: 0, road: false, ruin: false, terr: null, city: null };
+      if (land[i]) {
+        let bias = null;
+        caps.forEach((c, k) => { if (dist(N, c, i) <= 3) bias = TRIBES[roster[k].tribe].bias; });
+        let pF = 0.48, pW = 0.32;
+        if (bias === 'forest') { pF = 0.34; pW = 0.5; }
+        if (bias === 'mountain') { pF = 0.4; pW = 0.24; }
+        if (bias === 'field' || bias === 'fruit' || bias === 'crop') { pF = 0.62; pW = 0.26; }
+        const r = rnd();
+        T.t = r < pF ? 'field' : r < pF + pW ? 'forest' : 'mountain';
+      }
+      tiles.push(T);
     }
-    for (let i = 0; i < N * N; i++) {
-      if (tiles[i].t === 'ocean' && around(N, i, 1).some((j) => land[j])) tiles[i].t = 'water';
-    }
+    for (let i = 0; i < N * N; i++) if (tiles[i].t === 'ocean' && around(N, i, 1).some((j) => land[j])) tiles[i].t = 'water';
 
     const mkName = nameMaker(rnd);
     const cities = {};
     let nid = 1;
-    caps.forEach((c, k) => {
+    const mkCity = (at, owner, capital) => {
       const id = 'c' + nid++;
-      tiles[c].t = 'field';
-      cities[id] = { id, at: c, owner: roster[k].slot, name: mkName(), level: 1, pop: 0, capital: true, wall: false, workshop: false, park: 0, border: 1 };
-      tiles[c].city = id; tiles[c].terr = id;
-      for (const j of around(N, c, 1)) tiles[j].terr = id;
+      tiles[at].t = 'field';
+      cities[id] = { id, at, owner, name: mkName(), level: 1, pop: 0, capital, wall: false, workshop: false, park: 0, border: 1, connected: false };
+      tiles[at].city = id;
+      return cities[id];
+    };
+    caps.forEach((c, k) => {
+      const city = mkCity(c, roster[k].slot, true);
+      tiles[c].terr = city.id;
+      for (const j of around(N, c, 1)) tiles[j].terr = city.id;
     });
 
     const cand = [];
     for (let i = 0; i < N * N; i++) if (land[i] && tiles[i].t !== 'mountain' && !isWater(tiles[i].t)) cand.push(i);
     for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
-    const target = Math.round((N * N) / 19);
     const placed = [];
     for (const i of cand) {
-      if (placed.length >= target) break;
-      if (caps.some((c) => dist(N, c, i) < 3)) continue;
-      if (placed.some((p) => dist(N, p, i) < 2)) continue;
+      if (placed.length >= Math.round((N * N) / 19)) break;
+      if (caps.some((c) => dist(N, c, i) < 3) || placed.some((p) => dist(N, p, i) < 2)) continue;
       placed.push(i);
     }
-    placed.forEach((i) => {
-      const id = 'c' + nid++;
-      tiles[i].t = 'field';
-      cities[id] = { id, at: i, owner: null, name: mkName(), level: 1, pop: 0, capital: false, wall: false, workshop: false, park: 0, border: 1 };
-      tiles[i].city = id;
-    });
+    placed.forEach((i) => mkCity(i, null, false));
 
     const cityTiles = caps.concat(placed);
+    const nearCity = (i, r) => cityTiles.some((c) => dist(N, c, i) <= r);
     for (let i = 0; i < N * N; i++) {
       const T = tiles[i]; if (T.city) continue;
-      const near = cityTiles.some((c) => dist(N, c, i) <= 1) ? 0.42 : cityTiles.some((c) => dist(N, c, i) <= 2) ? 0.22 : 0.06;
+      const near = nearCity(i, 1) ? 0.42 : nearCity(i, 2) ? 0.22 : 0.06;
+      let bias = null;
+      caps.forEach((c, k) => { if (dist(N, c, i) <= 2) bias = TRIBES[roster[k].tribe].bias; });
       const r = rnd();
-      if (T.t === 'field') { if (r < near / 2) T.r = 'fruit'; else if (r < near) T.r = 'crop'; }
-      else if (T.t === 'forest') { if (r < near * 0.8) T.r = 'game'; }
+      if (T.t === 'field') {
+        const fruitShare = bias === 'fruit' ? 0.8 : bias === 'crop' ? 0.2 : 0.5;
+        if (r < near * fruitShare) T.r = 'fruit'; else if (r < near) T.r = 'crop';
+      } else if (T.t === 'forest') { if (r < near * 0.8) T.r = 'game'; }
       else if (T.t === 'mountain') { if (r < near * 0.7) T.r = 'ore'; }
       else if (T.t === 'water') { if (r < near * 0.9) T.r = 'fish'; }
+      else if (T.t === 'ocean') { if (r < 0.05) T.r = 'whale'; else if (r < 0.08) T.r = 'starfish'; }
     }
-    // every capital gets at least two quick early harvests next to it
     caps.forEach((c) => {
       const ring = around(N, c, 1).filter((j) => !tiles[j].city);
-      let quick = ring.filter((j) => tiles[j].r === 'fruit' || tiles[j].r === 'game' || tiles[j].r === 'fish').length;
+      let quick = ring.filter((j) => ['fruit', 'game', 'fish'].includes(tiles[j].r)).length;
       let guard = 0;
       while (quick < 2 && guard++ < 20) {
-        const j = ring[Math.floor(rnd() * ring.length)];
-        const T = tiles[j];
-        if (T.r === 'fruit' || T.r === 'game' || T.r === 'fish') continue;
+        const T = tiles[ring[Math.floor(rnd() * ring.length)]];
+        if (['fruit', 'game', 'fish'].includes(T.r)) continue;
         if (T.t === 'field') T.r = 'fruit';
         else if (T.t === 'forest') T.r = 'game';
         else if (T.t === 'water') T.r = 'fish';
@@ -609,89 +688,135 @@ window.TESSEL_CONFIG = {
         quick++;
       }
     });
+    // ruins
+    const ruinTarget = Math.max(2, Math.round((N * N) / 45));
+    const ruinCand = [];
+    for (let i = 0; i < N * N; i++) {
+      const T = tiles[i];
+      if (T.city || T.r || T.t === 'water') continue;
+      if (caps.some((c) => dist(N, c, i) < 3) || placed.some((p) => dist(N, p, i) < 2)) continue;
+      ruinCand.push(i);
+    }
+    for (let k = 0, guard = 0; k < ruinTarget && ruinCand.length && guard < 200; guard++) {
+      const i = ruinCand.splice(Math.floor(rnd() * ruinCand.length), 1)[0];
+      if (around(N, i, 1).some((j) => tiles[j].ruin)) continue;
+      tiles[i].ruin = true; k++;
+    }
 
     const units = {};
     let uid = 1;
     caps.forEach((c, k) => {
       const id = 'u' + uid++;
-      units[id] = { id, type: 'warrior', owner: roster[k].slot, at: c, hp: 10, home: 'c' + (k + 1), moved: false, attacked: false };
+      const type = TRIBES[roster[k].tribe].unit;
+      units[id] = { id, type, owner: roster[k].slot, at: c, hp: UNITS[type].hp, home: 'c' + (k + 1), moved: false, attacked: false, acted: false, kills: 0, vet: false, boat: null };
     });
 
     const players = roster.map((r) => ({
       slot: r.slot, userId: r.userId, name: r.name, tribe: r.tribe,
       stars: 5, techs: [TRIBES[r.tribe].tech], alive: true, explored: '0'.repeat(N * N), rewards: [],
+      kills: 0, lastAttack: 0, monuments: [],
     }));
 
-    const s = { v: 1, seed, size: N, round: 1, turnSlot: roster[0].slot, tiles, cities, units, players, nextId: Math.max(nid, uid) + 1, winner: null };
-    caps.forEach((c, k) => reveal(s, roster[k].slot, c, 2));
-    beginTurn(s, roster[0].slot, true);
+    const s = {
+      v: 2, seed, size: N, mode: settings.mode === 'perfection' ? 'perfection' : 'domination', maxRound: 30,
+      round: 1, turnSlot: roster[0].slot, seq: 0, rs: 0, events: [],
+      tiles, cities, units, players, nextId: Math.max(nid, uid) + 1, winner: null,
+    };
+    caps.forEach((c, k) => { reveal(s, roster[k].slot, c, 2); });
     return s;
   }
 
   // ---------- unit rules ----------
+  const maxHp = (u) => UNITS[u.type].hp + (u.vet ? 5 : 0);
   function stats(s, u) {
     const b = UNITS[u.type];
-    if (isWater(s.tiles[u.at].t)) return Object.assign({}, b, { atk: BOAT.atk, def: BOAT.def, mv: BOAT.mv, rng: BOAT.rng, boat: true });
-    return Object.assign({}, b, { boat: false });
+    if (u.boat) { const bt = BOATS[u.boat]; return { name: bt.name, atk: bt.atk, def: bt.def, mv: bt.mv, rng: bt.rng, skills: bt.skills, boat: u.boat, hp: maxHp(u) }; }
+    return { name: b.name, atk: b.atk, def: b.def, mv: b.mv, rng: b.rng, skills: b.skills, boat: null, hp: maxHp(u) };
   }
-  function passable(s, slot, i) {
-    const t = s.tiles[i].t;
-    if (t === 'mountain') return has(s, slot, 'climbing');
-    if (t === 'water') return has(s, slot, 'fishing');
-    if (t === 'ocean') return has(s, slot, 'sailing');
-    return true;
+  const hasSkill = (s, u, k) => stats(s, u).skills.includes(k);
+  const canMove = (s, u) => !u.acted && !u.moved;
+  const canAttackNow = (s, u) => {
+    const st = stats(s, u);
+    return !u.acted && !u.attacked && st.atk > 0 && (!u.moved || st.skills.includes('dash'));
+  };
+  const isDone = (s, u) => !canMove(s, u) && !canAttackNow(s, u) && !(hasSkill(s, u, 'convert') && !u.attacked && !u.acted && !u.moved);
+
+  function roadLike(s, slot, i) {
+    const T = s.tiles[i];
+    if (!T.road && !T.city) return false;
+    const o = tileOwner(s, i);
+    return o == null || o === slot;
   }
 
+  // Returns Map(tile -> {prev, rem}) of tiles the unit can reach this turn.
   function moveTargets(s, u) {
     const res = new Map();
-    if (!u || u.moved) return res;
+    if (!u || !canMove(s, u)) return res;
     const N = s.size;
     const occ = new Map(Object.values(s.units).map((x) => [x.at, x]));
     const adjEnemy = (i) => around(N, i, 1).some((j) => { const o = occ.get(j); return o && o.owner !== u.owner; });
+    const ocean = u.boat ? BOATS[u.boat].ocean : false;
     const best = new Map([[u.at, stats(s, u).mv]]);
+    const prev = new Map();
     const q = [u.at];
     while (q.length) {
       const i = q.shift();
       const rem = best.get(i);
       if (rem <= 0) continue;
+      const fromW = isWater(s.tiles[i].t);
       for (const j of around(N, i, 1)) {
-        if (occ.has(j) || !passable(s, u.owner, j)) continue;
-        const fromW = isWater(s.tiles[i].t), toW = isWater(s.tiles[j].t), tj = s.tiles[j].t;
-        let nr = rem - 1;
+        if (occ.has(j)) continue;
+        const Tj = s.tiles[j], toW = isWater(Tj.t);
+        if (!fromW && toW) { if (Tj.b !== 'port' || tileOwner(s, j) !== u.owner) continue; }
+        if (fromW && toW && Tj.t === 'ocean' && !ocean) continue;
+        if (!toW && Tj.t === 'mountain' && !has(s, u.owner, 'climbing')) continue;
+        const onRoad = !fromW && !toW && roadLike(s, u.owner, i) && roadLike(s, u.owner, j);
+        let nr = rem - (onRoad ? 0.5 : 1);
+        if (nr < 0) continue;
         if (fromW !== toW) nr = 0;
-        if (!toW && (tj === 'forest' || tj === 'mountain')) nr = 0;
+        if (!toW && !onRoad && (Tj.t === 'forest' || Tj.t === 'mountain')) nr = 0;
         if (adjEnemy(j)) nr = 0;
-        if (!best.has(j) || best.get(j) < nr) { best.set(j, nr); res.set(j, true); q.push(j); }
+        if (!best.has(j) || best.get(j) < nr) { best.set(j, nr); prev.set(j, i); q.push(j); }
       }
     }
-    res.delete(u.at);
+    for (const [j] of best) if (j !== u.at) res.set(j, { prev: prev.get(j), rem: best.get(j) });
     return res;
+  }
+  function pathTo(targets, from, to) {
+    const path = [to];
+    let cur = to, guard = 0;
+    while (cur !== from && guard++ < 100) { const t = targets.get(cur); if (!t) break; cur = t.prev; path.unshift(cur); }
+    return path;
   }
 
   function attackTargets(s, u) {
-    if (!u || u.attacked) return [];
+    if (!u || !canAttackNow(s, u)) return [];
     const st = stats(s, u);
     return Object.values(s.units).filter((o) => o.owner !== u.owner && dist(s.size, u.at, o.at) <= st.rng && isExplored(s, u.owner, o.at));
+  }
+  function convertTargets(s, u) {
+    if (!u || !hasSkill(s, u, 'convert') || u.acted || u.attacked || u.moved) return [];
+    return Object.values(s.units).filter((o) => o.owner !== u.owner && dist(s.size, u.at, o.at) <= 1 && isExplored(s, u.owner, o.at));
   }
 
   function defBonus(s, o) {
     const T = s.tiles[o.at];
-    if (isWater(T.t)) return 1;
-    if (T.city) { const c = s.cities[T.city]; if (c.owner === o.owner) return c.wall ? 4 : 1.5; }
-    if (T.t === 'forest' || T.t === 'mountain') return 1.5;
+    if (o.boat) return has(s, o.owner, 'aquatism') ? 1.5 : 1;
+    if (T.city && s.cities[T.city].owner === o.owner && hasSkill(s, o, 'fortify')) return s.cities[T.city].wall ? 4 : 1.5;
+    if (T.t === 'forest' && has(s, o.owner, 'archery')) return 1.5;
+    if (T.t === 'mountain' && has(s, o.owner, 'climbing')) return 1.5;
     return 1;
   }
 
-  // Predicted result of an attack, used for the preview and the real attack.
   function combat(s, u, o) {
     const a = stats(s, u), d = stats(s, o);
-    const aF = a.atk * (u.hp / UNITS[u.type].hp);
-    const dF = d.def * (o.hp / UNITS[o.type].hp) * defBonus(s, o);
-    const tot = aF + dF;
+    const aF = a.atk * (u.hp / maxHp(u));
+    const dF = d.def * (o.hp / maxHp(o)) * defBonus(s, o);
+    const tot = aF + dF || 1;
     const dmg = Math.round((aF / tot) * a.atk * 4.5);
     const kills = o.hp - dmg <= 0;
     const ret = !kills && dist(s.size, u.at, o.at) <= d.rng ? Math.round((dF / tot) * d.def * 4.5) : 0;
-    return { dmg, ret, kills, melee: a.rng === 1 && !a.boat };
+    return { dmg, ret, kills, melee: a.rng === 1 && !u.boat };
   }
 
   function ownUnit(s, slot, uid) {
@@ -699,13 +824,30 @@ window.TESSEL_CONFIG = {
     if (!u || u.owner !== slot) throw new Error('That is not your unit');
     return u;
   }
+  const vision = (s, u) => (s.tiles[u.at].t === 'mountain' || hasSkill(s, u, 'scout') ? 2 : 1);
 
   function actMove(s, slot, uid, to) {
     const u = ownUnit(s, slot, uid);
-    if (!moveTargets(s, u).has(to)) throw new Error('That unit can’t reach there');
+    const targets = moveTargets(s, u);
+    if (!targets.has(to)) throw new Error('That unit can’t reach there');
+    const path = pathTo(targets, u.at, to);
+    const fromW = isWater(s.tiles[u.at].t), toW = isWater(s.tiles[to].t);
     u.at = to; u.moved = true;
-    reveal(s, slot, to, visionR(s, to));
-    return [];
+    if (!fromW && toW) u.boat = 'boat';
+    if (fromW && !toW) u.boat = null;
+    reveal(s, slot, to, vision(s, u));
+    ev(s, { k: 'move', u: uid, path });
+    if (!fromW && toW) ev(s, { k: 'pop', at: to, text: 'Embarked', color: '#ffffff' });
+    return true;
+  }
+
+  function killUnit(s, o, killer) {
+    ev(s, { k: 'die', at: o.at, unit: JSON.parse(JSON.stringify(o)) });
+    delete s.units[o.id];
+    if (killer) {
+      killer.kills = (killer.kills || 0) + 1;
+      const kp = P(s, killer.owner); if (kp) kp.kills = (kp.kills || 0) + 1;
+    }
   }
 
   function actAttack(s, slot, uid, tid) {
@@ -713,44 +855,87 @@ window.TESSEL_CONFIG = {
     const o = s.units[tid];
     if (!o || !attackTargets(s, u).some((x) => x.id === tid)) throw new Error('Target is out of range');
     const r = combat(s, u, o);
-    const ev = [];
-    u.moved = true; u.attacked = true;
+    const from = u.at, to = o.at;
+    const escape = hasSkill(s, u, 'escape'), persist = hasSkill(s, u, 'persist');
+    P(s, slot).lastAttack = s.round;
+    u.attacked = true;
+    u.moved = escape ? false : true;
     o.hp -= r.dmg;
-    ev.push({ at: o.at, text: '−' + r.dmg, color: '#ff6b5b' });
+    ev(s, { k: 'attack', u: uid, t: tid, from, to, ranged: !r.melee, dmg: r.dmg });
+    ev(s, { k: 'pop', at: to, text: '−' + r.dmg, color: '#ff6b5b' });
     if (o.hp <= 0) {
-      const at = o.at;
-      delete s.units[tid];
-      if (r.melee && !isWater(s.tiles[at].t) && passable(s, slot, at)) {
-        u.at = at;
-        reveal(s, slot, at, visionR(s, at));
+      killUnit(s, o, u);
+      if (persist) u.attacked = false;
+      if (r.melee && !isWater(s.tiles[to].t) && (s.tiles[to].t !== 'mountain' || has(s, slot, 'climbing'))) {
+        u.at = to;
+        if (isWater(s.tiles[from].t)) u.boat = null;
+        reveal(s, slot, to, vision(s, u));
+        ev(s, { k: 'move', u: uid, path: [from, to] });
       }
     } else if (r.ret > 0) {
       u.hp -= r.ret;
-      ev.push({ at: u.at, text: '−' + r.ret, color: '#ffb35b' });
-      if (u.hp <= 0) delete s.units[uid];
+      ev(s, { k: 'attack', u: tid, t: uid, from: to, to: from, ranged: stats(s, o).rng > 1 && dist(s.size, from, to) > 1, dmg: r.ret, counter: true });
+      ev(s, { k: 'pop', at: from, text: '−' + r.ret, color: '#ffb35b' });
+      if (u.hp <= 0) killUnit(s, u, o);
     }
-    return ev;
+    return true;
+  }
+
+  function actConvert(s, slot, uid, tid) {
+    const u = ownUnit(s, slot, uid);
+    const o = s.units[tid];
+    if (!o || !convertTargets(s, u).some((x) => x.id === tid)) throw new Error('Can’t convert that unit');
+    o.owner = slot; o.home = u.home; o.moved = true; o.attacked = true; o.acted = true;
+    u.attacked = true; u.moved = true; u.acted = true;
+    P(s, slot).lastAttack = s.round;
+    ev(s, { k: 'convert', u: uid, t: tid, from: u.at, to: o.at });
+    ev(s, { k: 'pop', at: o.at, text: 'Converted', color: '#e7b6ff' });
+    return true;
+  }
+
+  function actHeal(s, slot, uid) {
+    const u = ownUnit(s, slot, uid);
+    if (!hasSkill(s, u, 'heal') || u.acted || u.attacked) throw new Error('This unit can’t heal right now');
+    const hurt = around(s.size, u.at, 1).map((j) => unitAt(s, j)).filter((x) => x && x.owner === slot && x.hp < maxHp(x));
+    if (!hurt.length) throw new Error('No hurt units next to it');
+    for (const x of hurt) {
+      const before = x.hp; x.hp = Math.min(maxHp(x), x.hp + 4);
+      ev(s, { k: 'pop', at: x.at, text: '+' + (x.hp - before), color: '#8ef08a' });
+    }
+    u.acted = true; u.moved = true; u.attacked = true;
+    ev(s, { k: 'heal', at: u.at });
+    return true;
   }
 
   function canCapture(s, u) {
     const T = s.tiles[u.at];
-    if (!T.city || u.moved || u.attacked) return false;
+    if (!T.city || u.moved || u.attacked || u.acted || u.boat) return false;
     return s.cities[T.city].owner !== u.owner;
   }
 
   function claim(s, c, r) {
-    s.tiles[c.at].terr = c.id;
-    for (const j of around(s.size, c.at, r)) if (s.tiles[j].terr == null) s.tiles[j].terr = c.id;
+    const got = [];
+    if (s.tiles[c.at].terr !== c.id) { s.tiles[c.at].terr = c.id; }
+    got.push(c.at);
+    for (const j of around(s.size, c.at, r)) if (s.tiles[j].terr == null) { s.tiles[j].terr = c.id; got.push(j); }
+    if (c.owner != null) revealTiles(s, c.owner, got);
   }
 
   function checkElim(s, slot) {
-    if (!Object.values(s.cities).some((c) => c.owner === slot)) {
+    if (!citiesOf(s, slot).length) {
       const p = P(s, slot);
-      if (p) p.alive = false;
-      for (const id of Object.keys(s.units)) if (s.units[id].owner === slot) delete s.units[id];
+      if (p && p.alive) {
+        p.alive = false;
+        for (const id of Object.keys(s.units)) if (s.units[id].owner === slot) killUnit(s, s.units[id], null);
+        ev(s, { k: 'elim', who: slot });
+      }
     }
-    const alive = s.players.filter((p) => p.alive);
-    if (alive.length === 1) s.winner = alive[0].slot;
+    if (s.mode === 'domination') {
+      const alive = s.players.filter((p) => p.alive);
+      if (alive.length === 1) s.winner = alive[0].slot;
+    } else if (s.players.filter((p) => p.alive).length === 1) {
+      s.winner = s.players.find((p) => p.alive).slot;
+    }
   }
 
   function actCapture(s, slot, uid) {
@@ -759,40 +944,143 @@ window.TESSEL_CONFIG = {
     const c = s.cities[s.tiles[u.at].city];
     const prev = c.owner;
     c.owner = slot;
-    u.moved = true; u.attacked = true;
+    u.moved = true; u.attacked = true; u.acted = true;
     if (prev == null) { c.level = 1; c.pop = 0; claim(s, c, 1); }
     else {
       c.capital = false;
+      if (c.connected) { c.connected = false; c.pop -= 1; }
       for (const x of Object.values(s.units)) if (x.home === c.id) x.home = null;
+      const got = Object.keys(s.tiles).map(Number).filter((j) => s.tiles[j].terr === c.id);
+      revealTiles(s, slot, got);
     }
-    reveal(s, slot, c.at, 2);
-    const ev = [{ at: c.at, text: prev == null ? 'Village joined' : 'City captured', color: '#ffffff' }];
-    if (prev != null) checkElim(s, prev);
-    return ev;
+    reveal(s, slot, c.at, 1);
+    ev(s, { k: 'capture', at: c.at });
+    ev(s, { k: 'pop', at: c.at, text: prev == null ? 'Village joined' : 'City captured', color: '#ffffff' });
+    updateConnections(s, slot);
+    if (prev != null) { updateConnections(s, prev); checkElim(s, prev); }
+    return true;
   }
 
-  function canRecover(s, u) { return !u.moved && !u.attacked && u.hp < UNITS[u.type].hp; }
+  function canExamine(s, u) { return s.tiles[u.at].ruin && !u.acted; }
+  function actExamine(s, slot, uid) {
+    const u = ownUnit(s, slot, uid);
+    if (!canExamine(s, u)) throw new Error('Nothing to examine');
+    const T = s.tiles[u.at], p = P(s, slot);
+    T.ruin = false;
+    u.acted = true; u.moved = true; u.attacked = true;
+    const r = rng(s);
+    const openTechs = Object.keys(TECHS).filter((k) => techState(s, slot, k) === 'open');
+    const spot = [u.at, ...around(s.size, u.at, 1)].find((j) => j !== u.at && !unitAt(s, j) && !isWater(s.tiles[j].t) && s.tiles[j].t !== 'mountain');
+    let text;
+    if (r < 0.3 || (r < 0.5 && !openTechs.length)) { p.stars += 10; text = '+10 stars'; }
+    else if (r < 0.5) { const k = openTechs[Math.floor(rng(s) * openTechs.length)]; p.techs.push(k); text = TECHS[k].name + ' learned'; }
+    else if (r < 0.7) { explore(s, slot, u.at); text = 'Explorer'; }
+    else if (r < 0.85) {
+      const cap = capitalOf(s, slot) || citiesOf(s, slot)[0];
+      if (cap) { addPop(s, cap, 3); text = '+3 pop in ' + cap.name; } else { p.stars += 10; text = '+10 stars'; }
+    } else if (spot != null && r < 0.95) {
+      const id = 'u' + s.nextId++;
+      s.units[id] = { id, type: 'swordsman', owner: slot, at: spot, hp: 20, home: null, moved: true, attacked: true, acted: true, kills: 3, vet: true, boat: null };
+      ev(s, { k: 'train', at: spot, u: id });
+      text = 'Veteran swordsman';
+    } else if (spot != null) {
+      const id = 'u' + s.nextId++;
+      s.units[id] = { id, type: 'giant', owner: slot, at: spot, hp: 40, home: null, moved: true, attacked: true, acted: true, kills: 0, vet: false, boat: null };
+      ev(s, { k: 'train', at: spot, u: id });
+      text = 'A Giant!';
+    } else { p.stars += 10; text = '+10 stars'; }
+    ev(s, { k: 'pop', at: u.at, text, color: '#ffe08a' });
+    return true;
+  }
+
+  function explore(s, slot, from) {
+    let cur = from;
+    const N = s.size;
+    for (let k = 0; k < 15; k++) {
+      const opts = around(N, cur, 1).filter((j) => !isWater(s.tiles[j].t));
+      const fresh = opts.filter((j) => !isExplored(s, slot, j) || around(N, j, 1).some((x) => !isExplored(s, slot, x)));
+      const pool = fresh.length ? fresh : opts;
+      if (!pool.length) break;
+      cur = pool[Math.floor(rng(s) * pool.length)];
+      reveal(s, slot, cur, 1);
+    }
+  }
+
+  function canRecover(s, u) { return !u.moved && !u.attacked && !u.acted && u.hp < maxHp(u); }
   function actRecover(s, slot, uid) {
     const u = ownUnit(s, slot, uid);
     if (!canRecover(s, u)) throw new Error('This unit can’t recover right now');
-    const heal = tileOwner(s, u.at) === slot ? 4 : 2;
     const before = u.hp;
-    u.hp = Math.min(UNITS[u.type].hp, u.hp + heal);
-    u.moved = true; u.attacked = true;
-    return [{ at: u.at, text: '+' + (u.hp - before), color: '#8ef08a' }];
+    u.hp = Math.min(maxHp(u), u.hp + (tileOwner(s, u.at) === slot ? 4 : 2));
+    u.moved = true; u.attacked = true; u.acted = true;
+    ev(s, { k: 'pop', at: u.at, text: '+' + (u.hp - before), color: '#8ef08a' });
+    ev(s, { k: 'heal', at: u.at });
+    return true;
+  }
+
+  function canPromote(s, u) { return (u.kills || 0) >= 3 && !u.vet && !u.boat && u.type !== 'giant'; }
+  function actPromote(s, slot, uid) {
+    const u = ownUnit(s, slot, uid);
+    if (!canPromote(s, u)) throw new Error('Needs three kills first');
+    u.vet = true; u.hp = maxHp(u);
+    ev(s, { k: 'pop', at: u.at, text: 'Veteran', color: '#ffe08a' });
+    ev(s, { k: 'level', at: u.at });
+    return true;
+  }
+
+  function actDisband(s, slot, uid) {
+    const u = ownUnit(s, slot, uid);
+    if (!has(s, slot, 'freespirit')) throw new Error('Needs Free Spirit');
+    if (u.acted) throw new Error('This unit already acted');
+    const refund = Math.floor(UNITS[u.type].cost / 2);
+    P(s, slot).stars += refund;
+    ev(s, { k: 'pop', at: u.at, text: '+' + refund + ' ★', color: '#ffe08a' });
+    killUnit(s, u, null);
+    return true;
+  }
+
+  function upgradeCheck(s, slot, u) {
+    const next = u.boat === 'boat' ? 'ship' : u.boat === 'ship' ? 'battleship' : null;
+    if (!next) return { next: null, err: 'Not a boat' };
+    const B = BOATS[next];
+    if (!has(s, slot, B.tech)) return { next, err: 'Needs ' + TECHS[B.tech].name };
+    if (P(s, slot).stars < B.cost) return { next, err: 'Not enough stars' };
+    return { next, err: null };
+  }
+  function actUpgrade(s, slot, uid) {
+    const u = ownUnit(s, slot, uid);
+    const { next, err } = upgradeCheck(s, slot, u);
+    if (err) throw new Error(err);
+    P(s, slot).stars -= BOATS[next].cost;
+    u.boat = next;
+    ev(s, { k: 'pop', at: u.at, text: BOATS[next].name, color: '#ffffff' });
+    ev(s, { k: 'level', at: u.at });
+    return true;
   }
 
   // ---------- cities ----------
   const homeCount = (s, cid) => Object.values(s.units).filter((u) => u.home === cid).length;
-  const cityIncome = (c) => c.level + (c.workshop ? 1 : 0) + (c.capital ? 1 : 0);
+  function marketIncome(s, i) {
+    let n = 0;
+    for (const j of around(s.size, i, 1)) {
+      const T = s.tiles[j];
+      if (T.b === 'sawmill' || T.b === 'windmill' || T.b === 'forge') n += T.bl || 0;
+    }
+    return Math.min(8, n);
+  }
+  function cityIncome(s, c) {
+    let n = c.level + (c.workshop ? 1 : 0) + (c.capital ? 1 : 0) + (c.park || 0);
+    s.tiles.forEach((T, i) => { if (T.terr === c.id && T.b === 'market') n += marketIncome(s, i); });
+    return n;
+  }
 
   function trainCheck(s, slot, cid, type) {
     const c = s.cities[cid], def = UNITS[type], p = P(s, slot);
     if (!c || c.owner !== slot) return 'Not your city';
     if (!def || def.special) return 'Can’t be trained';
     if (def.tech && !p.techs.includes(def.tech)) return 'Needs ' + TECHS[def.tech].name;
-    if (unitAt(s, c.at)) return 'Clear the city tile first';
-    if (homeCount(s, cid) >= c.level + 1) return 'City unit limit reached';
+    if (unitAt(s, c.at)) return 'City tile is taken';
+    if (homeCount(s, cid) >= c.level + 1) return 'City is full';
     if (p.stars < def.cost) return 'Not enough stars';
     return null;
   }
@@ -802,8 +1090,9 @@ window.TESSEL_CONFIG = {
     const c = s.cities[cid];
     P(s, slot).stars -= UNITS[type].cost;
     const id = 'u' + s.nextId++;
-    s.units[id] = { id, type, owner: slot, at: c.at, hp: UNITS[type].hp, home: cid, moved: true, attacked: true };
-    return [{ at: c.at, text: UNITS[type].name, color: '#ffffff' }];
+    s.units[id] = { id, type, owner: slot, at: c.at, hp: UNITS[type].hp, home: cid, moved: true, attacked: true, acted: true, kills: 0, vet: false, boat: null };
+    ev(s, { k: 'train', at: c.at, u: id });
+    return true;
   }
 
   function addPop(s, c, n) {
@@ -812,33 +1101,195 @@ window.TESSEL_CONFIG = {
       c.pop -= c.level + 1;
       c.level++;
       if (c.owner != null) P(s, c.owner).rewards.push({ city: c.id, level: c.level });
+      ev(s, { k: 'level', at: c.at, city: true });
     }
   }
 
+  // ---------- tiles: harvest, build, terrain ----------
+  function ownTile(s, slot, i) { return tileOwner(s, i) === slot; }
+  function enemyOn(s, slot, i) { const o = unitAt(s, i); return o && o.owner !== slot; }
+
   function harvestCheck(s, slot, i) {
     const T = s.tiles[i], h = HARVEST[T.r];
-    if (!h) return 'Nothing to harvest';
-    if (tileOwner(s, i) !== slot) return 'Only inside your borders';
+    if (!h || T.b) return 'Nothing to harvest';
+    if (!ownTile(s, slot, i)) return 'Only inside your borders';
     if (!has(s, slot, h.tech)) return 'Needs ' + TECHS[h.tech].name;
-    const o = unitAt(s, i);
-    if (o && o.owner !== slot) return 'An enemy is standing here';
+    if (enemyOn(s, slot, i)) return 'An enemy is standing here';
     if (P(s, slot).stars < h.cost) return 'Not enough stars';
     return null;
   }
   function actHarvest(s, slot, i) {
     const err = harvestCheck(s, slot, i);
     if (err) throw new Error(err);
-    const T = s.tiles[i], h = HARVEST[T.r];
-    P(s, slot).stars -= h.cost;
-    T.r = h.becomes;
-    addPop(s, s.cities[T.terr], h.pop);
-    return [{ at: i, text: '+' + h.pop + ' pop', color: '#fff3b0' }];
+    const T = s.tiles[i], h = HARVEST[T.r], p = P(s, slot);
+    p.stars -= h.cost;
+    T.r = null;
+    ev(s, { k: 'build', at: i, harvest: true });
+    if (h.pop) { ev(s, { k: 'pop', at: i, text: '+' + h.pop + ' pop', color: '#fff3b0' }); addPop(s, s.cities[T.terr], h.pop); }
+    if (h.gain) { p.stars += h.gain; ev(s, { k: 'pop', at: i, text: '+' + h.gain + ' ★', color: '#ffe08a' }); }
+    return true;
+  }
+
+  function monumentReady(s, slot, k) {
+    const p = P(s, slot);
+    switch (k) {
+      case 'altar': return s.round - (p.lastAttack || 0) > 5 && s.round > 5;
+      case 'tower': return Object.keys(TECHS).every((t) => p.techs.includes(t));
+      case 'tomb': return p.stars >= 100;
+      case 'eye': return !p.explored.includes('0');
+      case 'gate': return (p.kills || 0) >= 10;
+      case 'bazaar': return citiesOf(s, slot).filter((c) => c.connected).length >= 5;
+      case 'fortune': return citiesOf(s, slot).some((c) => c.level >= 5);
+    }
+    return false;
+  }
+
+  function buildCheck(s, slot, i, k) {
+    const B = BUILDINGS[k], T = s.tiles[i], p = P(s, slot);
+    if (!B) return 'Unknown building';
+    if (!B.on(T)) return 'Can’t be built here';
+    if (!ownTile(s, slot, i)) return 'Only inside your borders';
+    if (!has(s, slot, B.tech)) return 'Needs ' + TECHS[B.tech].name;
+    if (enemyOn(s, slot, i)) return 'An enemy is standing here';
+    if (B.unique && s.tiles.some((X) => X.terr === T.terr && X.b === k)) return 'One per city';
+    if (B.monument) {
+      if (p.monuments.includes(k)) return 'Already built';
+      if (!monumentReady(s, slot, k)) return B.monument;
+    }
+    if (B.adj && !around(s.size, i, 1).some((j) => s.tiles[j].b === B.adj && ownTile(s, slot, j))) return 'Needs a ' + BUILDINGS[B.adj].name.toLowerCase() + ' next to it';
+    if (p.stars < B.cost) return 'Not enough stars';
+    return null;
+  }
+  function actBuild(s, slot, i, k) {
+    const err = buildCheck(s, slot, i, k);
+    if (err) throw new Error(err);
+    const B = BUILDINGS[k], T = s.tiles[i], p = P(s, slot), c = s.cities[T.terr];
+    p.stars -= B.cost;
+    T.b = k; T.bt = s.round;
+    if (T.r === 'crop' || T.r === 'ore') T.r = null;
+    let pop = B.pop || 0;
+    if (B.adj) { T.bl = around(s.size, i, 1).filter((j) => s.tiles[j].b === B.adj && ownTile(s, slot, j)).length * B.per; pop = T.bl; }
+    if (B.temple) T.bl = 1;
+    if (B.monument) p.monuments.push(k);
+    ev(s, { k: 'build', at: i });
+    if (pop) { ev(s, { k: 'pop', at: i, text: '+' + pop + ' pop', color: '#fff3b0' }); addPop(s, c, pop); }
+    // new huts, farms and mines boost neighbouring sawmills, windmills and forges
+    for (const [upg, base] of [['sawmill', 'lumber'], ['windmill', 'farm'], ['forge', 'mine']]) {
+      if (k !== base) continue;
+      for (const j of around(s.size, i, 1)) {
+        const X = s.tiles[j];
+        if (X.b === upg && ownTile(s, slot, j)) {
+          const per = BUILDINGS[upg].per;
+          X.bl = (X.bl || 0) + per;
+          ev(s, { k: 'pop', at: j, text: '+' + per + ' pop', color: '#fff3b0' });
+          addPop(s, s.cities[X.terr], per);
+        }
+      }
+    }
+    if (k === 'port') updateConnections(s, slot);
+    return true;
+  }
+
+  function roadCheck(s, slot, i) {
+    const T = s.tiles[i];
+    if (!has(s, slot, 'roads')) return 'Needs Roads';
+    if (isWater(T.t) || T.t === 'mountain' || T.city || T.road) return 'Can’t build a road here';
+    const o = tileOwner(s, i);
+    if (o != null && o !== slot) return 'Not in enemy land';
+    if (o == null && !around(s.size, i, 1).some((j) => roadLike(s, slot, j) || tileOwner(s, j) === slot)) return 'Build next to your land or roads';
+    if (enemyOn(s, slot, i)) return 'An enemy is standing here';
+    if (P(s, slot).stars < 3) return 'Not enough stars';
+    return null;
+  }
+  function actRoad(s, slot, i) {
+    const err = roadCheck(s, slot, i);
+    if (err) throw new Error(err);
+    P(s, slot).stars -= 3;
+    s.tiles[i].road = true;
+    ev(s, { k: 'build', at: i });
+    updateConnections(s, slot);
+    return true;
+  }
+
+  const TERRAFORM = {
+    clear: { name: 'Clear forest', tech: 'forestry',     cost: 0, gain: 1 },
+    burn:  { name: 'Burn forest',  tech: 'construction', cost: 5 },
+    grow:  { name: 'Grow forest',  tech: 'spiritualism', cost: 5 },
+  };
+  function terraformCheck(s, slot, i, k) {
+    const T = s.tiles[i], F = TERRAFORM[k];
+    if (k === 'grow' ? !emptyField(T) : (T.t !== 'forest' || T.b || T.ruin)) return 'Not possible here';
+    if (!ownTile(s, slot, i)) return 'Only inside your borders';
+    if (!has(s, slot, F.tech)) return 'Needs ' + TECHS[F.tech].name;
+    if (enemyOn(s, slot, i)) return 'An enemy is standing here';
+    if (P(s, slot).stars < F.cost) return 'Not enough stars';
+    return null;
+  }
+  function actTerraform(s, slot, i, k) {
+    const err = terraformCheck(s, slot, i, k);
+    if (err) throw new Error(err);
+    const T = s.tiles[i], F = TERRAFORM[k], p = P(s, slot);
+    p.stars -= F.cost;
+    if (k === 'clear') { T.t = 'field'; T.r = null; p.stars += F.gain; ev(s, { k: 'pop', at: i, text: '+1 ★', color: '#ffe08a' }); }
+    if (k === 'burn') { T.t = 'field'; T.r = 'crop'; }
+    if (k === 'grow') { T.t = 'forest'; }
+    ev(s, { k: 'build', at: i, burn: k === 'burn' });
+    return true;
+  }
+
+  // ---------- capital connections ----------
+  function updateConnections(s, slot) {
+    const N = s.size;
+    const cap = capitalOf(s, slot);
+    const reach = new Set();
+    if (cap) {
+      const node = (i) => {
+        const T = s.tiles[i], o = tileOwner(s, i);
+        if (o != null && o !== slot) return false;
+        return !!(T.road || (T.city && s.cities[T.city].owner === slot) || (T.b === 'port' && o === slot));
+      };
+      const q = [cap.at]; reach.add(cap.at);
+      let portsDone = false;
+      while (q.length) {
+        const i = q.shift();
+        for (const j of around(N, i, 1)) if (!reach.has(j) && node(j)) { reach.add(j); q.push(j); }
+        if (!q.length && !portsDone) {
+          // own ports reached so far link by water to every port reachable across water
+          portsDone = true;
+          const ports = [...reach].filter((i2) => s.tiles[i2].b === 'port');
+          if (ports.length) {
+            const seen = new Set(ports), wq = ports.slice();
+            while (wq.length) {
+              const w = wq.shift();
+              for (const j of around(N, w, 1)) {
+                if (seen.has(j) || !isWater(s.tiles[j].t)) continue;
+                seen.add(j); wq.push(j);
+                if (s.tiles[j].b === 'port' && tileOwner(s, j) === slot && !reach.has(j)) { reach.add(j); q.push(j); portsDone = false; }
+              }
+            }
+          }
+        }
+      }
+    }
+    for (const c of citiesOf(s, slot)) {
+      if (c.capital) continue;
+      const now = !!cap && reach.has(c.at);
+      if (now && !c.connected) {
+        c.connected = true;
+        ev(s, { k: 'pop', at: c.at, text: 'Connected', color: '#fff3b0' });
+        addPop(s, c, 1); addPop(s, cap, 1);
+      } else if (!now && c.connected) {
+        c.connected = false;
+        c.pop -= 1; if (cap) cap.pop -= 1;
+      }
+    }
   }
 
   // ---------- tech ----------
   function techCost(s, slot, k) {
-    const n = Object.values(s.cities).filter((c) => c.owner === slot).length;
-    return TECHS[k].tier * Math.max(1, n) + 4;
+    const n = Math.max(1, citiesOf(s, slot).length);
+    const base = TECHS[k].tier * n + 4;
+    return has(s, slot, 'philosophy') ? Math.ceil(base * 0.67) : base;
   }
   function techState(s, slot, k) {
     const p = P(s, slot);
@@ -856,7 +1307,9 @@ window.TESSEL_CONFIG = {
     if (p.stars < cost) throw new Error('Not enough stars');
     p.stars -= cost;
     p.techs.push(k);
-    return [];
+    if (k === 'diplomacy') for (const pl of s.players) { if (pl.slot === slot) continue; const cap = capitalOf(s, pl.slot); if (cap) reveal(s, slot, cap.at, 1); }
+    ev(s, { k: 'tech', tech: k });
+    return true;
   }
 
   // ---------- level-up rewards ----------
@@ -867,39 +1320,44 @@ window.TESSEL_CONFIG = {
     if (!rewardOptions(r.level).includes(choice)) throw new Error('Not an option');
     p.rewards.shift();
     const c = s.cities[r.city];
-    if (!c || c.owner !== slot) return [];
+    if (!c || c.owner !== slot) return true;
     const N = s.size;
     switch (choice) {
       case 'workshop': c.workshop = true; break;
-      case 'explorer': reveal(s, slot, c.at, 3); break;
+      case 'explorer': explore(s, slot, c.at); break;
       case 'wall': c.wall = true; break;
       case 'stars': p.stars += 5; break;
-      case 'border': c.border = 2; claim(s, c, 2); break;
       case 'pop': addPop(s, c, 3); break;
-      case 'park': c.park++; break;
+      case 'border': c.border = 2; claim(s, c, 2); break;
+      case 'park': c.park = (c.park || 0) + 1; break;
       case 'giant': {
         let spot = unitAt(s, c.at) ? null : c.at;
-        if (spot == null) spot = around(N, c.at, 1).find((j) => !unitAt(s, j) && !isWater(s.tiles[j].t) && passable(s, slot, j));
+        if (spot == null) spot = around(N, c.at, 1).find((j) => !unitAt(s, j) && !isWater(s.tiles[j].t) && (s.tiles[j].t !== 'mountain' || has(s, slot, 'climbing')));
         if (spot != null) {
           const id = 'u' + s.nextId++;
-          s.units[id] = { id, type: 'giant', owner: slot, at: spot, hp: 40, home: null, moved: true, attacked: true };
+          s.units[id] = { id, type: 'giant', owner: slot, at: spot, hp: 40, home: null, moved: true, attacked: true, acted: true, kills: 0, vet: false, boat: null };
+          ev(s, { k: 'train', at: spot, u: id });
         }
         break;
       }
     }
-    return [{ at: c.at, text: REWARD_INFO[choice].name, color: '#ffffff' }];
+    ev(s, { k: 'pop', at: c.at, text: REWARD_INFO[choice].name, color: '#ffffff' });
+    return true;
   }
 
   // ---------- turns ----------
   function income(s, slot) {
     let n = 0;
-    for (const c of Object.values(s.cities)) if (c.owner === slot) n += cityIncome(c);
+    for (const c of citiesOf(s, slot)) n += cityIncome(s, c);
     return n;
   }
   function beginTurn(s, slot) {
     const p = P(s, slot);
-    p.stars += income(s, slot);
-    for (const u of Object.values(s.units)) if (u.owner === slot) { u.moved = false; u.attacked = false; }
+    if (s.round > 1) p.stars += income(s, slot);
+    for (const u of Object.values(s.units)) if (u.owner === slot) { u.moved = false; u.attacked = false; u.acted = false; }
+    s.tiles.forEach((T) => {
+      if (T.b && BUILDINGS[T.b].temple && T.terr != null && s.cities[T.terr].owner === slot) T.bl = Math.min(5, 1 + Math.floor((s.round - T.bt) / 3));
+    });
   }
   function endTurn(s) {
     const cur = s.turnSlot, p = P(s, cur);
@@ -909,36 +1367,53 @@ window.TESSEL_CONFIG = {
     for (let k = 1; k <= s.players.length; k++) {
       const ni = (ci + k) % s.players.length;
       const np = s.players[ni];
-      if (np.alive) {
-        if (ni <= ci) s.round++;
-        s.turnSlot = np.slot;
-        beginTurn(s, np.slot);
-        return;
+      if (!np.alive) continue;
+      if (ni <= ci) {
+        s.round++;
+        if (s.mode === 'perfection' && s.round > s.maxRound) {
+          const alive = s.players.filter((x) => x.alive);
+          s.winner = alive.sort((a, b) => score(s, b.slot) - score(s, a.slot))[0].slot;
+          return;
+        }
       }
+      s.turnSlot = np.slot;
+      ev(s, { k: 'turn', to: np.slot });
+      beginTurn(s, np.slot);
+      return;
     }
   }
 
   function score(s, slot) {
     const p = P(s, slot); if (!p) return 0;
     let sc = 0;
-    for (const c of Object.values(s.cities)) if (c.owner === slot) sc += c.level * 100 + c.park * 250;
-    sc += p.techs.length * 50;
     for (const ch of p.explored) if (ch === '1') sc += 5;
+    for (const c of citiesOf(s, slot)) sc += 100 + 50 * (c.level - 1) + 250 * (c.park || 0);
+    s.tiles.forEach((T) => {
+      if (T.terr == null || s.cities[T.terr].owner !== slot) return;
+      sc += 20;
+      if (T.b && BUILDINGS[T.b].temple) sc += 100 + 50 * ((T.bl || 1) - 1);
+      if (T.b && BUILDINGS[T.b].monument) sc += 400;
+    });
+    for (const t of p.techs) sc += 100 * TECHS[t].tier;
+    for (const u of Object.values(s.units)) if (u.owner === slot) sc += 5 * UNITS[u.type].cost;
     return sc;
   }
 
   root.Rules = {
-    TRIBES, TRIBE_ORDER, TECHS, BRANCHES, UNITS, TRAINABLE, BOAT, HARVEST, REWARDS, REWARD_INFO, TERRAIN_NAME, RESOURCE_NAME,
-    mulberry32, isWater, dist, around, P, unitAt, has, colorOf, tileOwner, isExplored, reveal,
-    generateState, stats, passable, moveTargets, attackTargets, combat, defBonus,
-    actMove, actAttack, canCapture, actCapture, canRecover, actRecover,
-    homeCount, cityIncome, trainCheck, actTrain, harvestCheck, actHarvest,
+    TRIBES, TRIBE_ORDER, TECHS, BRANCHES, UNITS, TRAINABLE, BOATS, SKILL_INFO, HARVEST, BUILDINGS, BUILD_ORDER, TERRAFORM,
+    REWARDS, REWARD_INFO, TERRAIN_NAME, RESOURCE_NAME,
+    mulberry32, isWater, dist, around, P, unitAt, has, colorOf, tileOwner, isExplored, reveal, citiesOf, capitalOf,
+    generateState, stats, maxHp, hasSkill, canMove, canAttackNow, isDone, moveTargets, pathTo, attackTargets, convertTargets, combat, defBonus,
+    actMove, actAttack, actConvert, actHeal, canCapture, actCapture, canExamine, actExamine, canRecover, actRecover,
+    canPromote, actPromote, actDisband, upgradeCheck, actUpgrade,
+    homeCount, cityIncome, marketIncome, trainCheck, actTrain, harvestCheck, actHarvest, buildCheck, actBuild, monumentReady,
+    roadCheck, actRoad, terraformCheck, actTerraform, updateConnections,
     techCost, techState, actResearch, rewardOptions, actReward,
     income, beginTurn, endTurn, score,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 
-// Tessel renderer: isometric tiles, terrain, cities and units drawn with canvas paths.
+// Tessel renderer v2: isometric low-poly tiles, buildings, units and animation hooks.
 (function (root) {
   'use strict';
   const R = root.Rules;
@@ -957,7 +1432,9 @@ window.TESSEL_CONFIG = {
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
+  function strHash(str) { let h = 0; for (let k = 0; k < str.length; k++) h = (h * 31 + str.charCodeAt(k)) | 0; return Math.abs(h) % 1000; }
   function shade(hex, amt) {
+    if (hex[0] !== '#') return hex;
     const n = parseInt(hex.slice(1), 16);
     const c = (v) => Math.max(0, Math.min(255, Math.round(v + amt)));
     return `rgb(${c(n >> 16)},${c((n >> 8) & 255)},${c(n & 255)})`;
@@ -975,7 +1452,7 @@ window.TESSEL_CONFIG = {
     ctx.moveTo(0, y - hh); ctx.lineTo(hw, y); ctx.lineTo(0, y + hh); ctx.lineTo(-hw, y); ctx.closePath();
   }
   function circle(ctx, x, y, r, fill, stroke, lw) {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), 0, Math.PI * 2);
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
   }
@@ -983,29 +1460,41 @@ window.TESSEL_CONFIG = {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
   }
+  function ellipse(ctx, x, y, rx, ry, fill) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  // small isometric box: footprint half-width hw, height h
+  function box(ctx, x, y, hw, h, top, left, right) {
+    const hh = hw / 2;
+    poly(ctx, [x - hw, y, x, y + hh, x, y + hh - h, x - hw, y - h], left);
+    poly(ctx, [x, y + hh, x + hw, y, x + hw, y - h, x, y + hh - h], right);
+    poly(ctx, [x - hw, y - h, x, y - hh - h, x + hw, y - h, x, y + hh - h], top);
+  }
 
   // ---------- ground ----------
-  function drawGround(ctx, T, i) {
-    const water = R.isWater(T.t);
+  function drawGround(ctx, T, i, t) {
     const pal = TERRAIN[T.t];
     const j = (hash(i) - 0.5) * 16;
-    if (water) {
+    if (R.isWater(T.t)) {
       diamond(ctx, 0);
       ctx.fillStyle = shade(pal.top, j * 0.6); ctx.fill();
-      if (hash(i, 3) < 0.45) {
-        const x = (hash(i, 4) - 0.5) * 24, y = (hash(i, 5) - 0.5) * 10;
-        ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.quadraticCurveTo(x - 3, y - 2.5, x, y); ctx.quadraticCurveTo(x + 3, y + 2.5, x + 6, y);
-        ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1.3; ctx.stroke();
-      }
+      const ph = t / 1400 + hash(i, 3) * 6.28;
+      const x = (hash(i, 4) - 0.5) * 22 + Math.sin(ph) * 3, y = (hash(i, 5) - 0.5) * 9;
+      ctx.globalAlpha = 0.18 + 0.14 * (Math.sin(ph * 1.3) + 1) / 2;
+      ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.quadraticCurveTo(x - 3, y - 2.5, x, y); ctx.quadraticCurveTo(x + 3, y + 2.5, x + 6, y);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.globalAlpha = 1;
       return;
     }
     poly(ctx, [-HW, -D, 0, HH - D, 0, HH, -HW, 0], shade(pal.l, j * 0.5));
     poly(ctx, [0, HH - D, HW, -D, HW, 0, 0, HH], shade(pal.r, j * 0.5));
     diamond(ctx, -D);
     ctx.fillStyle = shade(pal.top, j); ctx.fill();
-    // a soft light facet gives the low-poly feel
     poly(ctx, [0, -D - HH, HW, -D, 0, -D], 'rgba(255,255,255,0.06)');
-    if (T.t === 'field' && hash(i, 9) < 0.6) {
+    if (T.t === 'field' && !T.b && !T.city && hash(i, 9) < 0.6) {
       for (let k = 0; k < 3; k++) {
         const x = (hash(i, 10 + k) - 0.5) * 34, y = -D + (hash(i, 20 + k) - 0.5) * 14;
         line(ctx, x, y, x - 1.5, y - 3.5, 'rgba(60,100,30,0.55)', 1.1);
@@ -1014,30 +1503,55 @@ window.TESSEL_CONFIG = {
     }
   }
 
-  function drawFog(ctx, i) {
+  function drawFog(ctx, i, t) {
     poly(ctx, [-HW, -D, 0, HH - D, 0, HH, -HW, 0], '#203a50');
     poly(ctx, [0, HH - D, HW, -D, HW, 0, 0, HH], '#1a3145');
     diamond(ctx, -D); ctx.fillStyle = '#2b4760'; ctx.fill();
-    const a = hash(i, 1), b = hash(i, 2);
-    circle(ctx, -8 + a * 8, -D - 2, 7 + b * 3, '#34526d');
-    circle(ctx, 6 + b * 6, -D + 1, 6 + a * 3, '#304c66');
+    const a = hash(i, 1), b = hash(i, 2), drift = Math.sin(t / 3000 + a * 6) * 2;
+    circle(ctx, -8 + a * 8 + drift, -D - 2, 7 + b * 3, '#34526d');
+    circle(ctx, 6 + b * 6 - drift, -D + 1, 6 + a * 3, '#304c66');
   }
 
-  // ---------- terrain features ----------
-  function tree(ctx, x, y, s) {
-    ctx.fillStyle = '#6b4a2b'; ctx.fillRect(x - 1.4 * s, y - 4 * s, 2.8 * s, 5 * s);
-    poly(ctx, [x - 7 * s, y - 3 * s, x, y - 17 * s, x, y - 1.5 * s], '#3f8036');
-    poly(ctx, [x, y - 17 * s, x + 7 * s, y - 3 * s, x, y - 1.5 * s], '#2f652a');
-    poly(ctx, [x - 5 * s, y - 10 * s, x, y - 22 * s, x, y - 9 * s], '#4a9140');
-    poly(ctx, [x, y - 22 * s, x + 5 * s, y - 10 * s, x, y - 9 * s], '#387532');
+  function drawRoad(ctx, s, i, oy) {
+    const N = s.size, x = i % N, y = Math.floor(i / N);
+    const dirs = [];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue;
+      const T = s.tiles[ny * N + nx];
+      if (T.road || T.city) dirs.push([(dx - dy) * HW, (dx + dy) * HH]);
+    }
+    ctx.lineCap = 'round';
+    const paint = (col, w) => {
+      ctx.strokeStyle = col; ctx.lineWidth = w;
+      if (!dirs.length) { ctx.beginPath(); ctx.arc(0, oy, 4, 0, 7); ctx.stroke(); return; }
+      for (const [ex, ey] of dirs) { ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(ex / 2, oy + ey / 2); ctx.stroke(); }
+    };
+    paint('#8a6a42', 7); paint('#c9a46b', 4.5);
   }
-  function drawForest(ctx, oy, i) {
+
+  // ---------- nature ----------
+  function tree(ctx, x, y, s, dark) {
+    ctx.fillStyle = '#6b4a2b'; ctx.fillRect(x - 1.4 * s, y - 4 * s, 2.8 * s, 5 * s);
+    poly(ctx, [x - 7 * s, y - 3 * s, x, y - 17 * s, x, y - 1.5 * s], dark ? '#2f6a33' : '#3f8036');
+    poly(ctx, [x, y - 17 * s, x + 7 * s, y - 3 * s, x, y - 1.5 * s], dark ? '#24532a' : '#2f652a');
+    poly(ctx, [x - 5 * s, y - 10 * s, x, y - 22 * s, x, y - 9 * s], dark ? '#3a7a3d' : '#4a9140');
+    poly(ctx, [x, y - 22 * s, x + 5 * s, y - 10 * s, x, y - 9 * s], dark ? '#2d6331' : '#387532');
+  }
+  function drawForest(ctx, oy, i, sparse) {
     const k = hash(i, 30);
+    if (sparse) { tree(ctx, -14, oy - 4, 0.8); tree(ctx, 13, oy - 5, 0.75); return; }
     tree(ctx, -11, oy - 2, 0.9 + k * 0.2);
     tree(ctx, 10, oy - 4, 0.85);
     tree(ctx, -1, oy + 5, 1.05 + k * 0.15);
   }
-  function drawMountain(ctx, oy) {
+  function drawMountain(ctx, oy, small) {
+    if (small) {
+      poly(ctx, [-26, oy + 2, -14, oy - 14, -4, oy + 5], '#b1ab97');
+      poly(ctx, [-14, oy - 14, -4, oy + 5, -9, oy + 6], '#8a8572');
+      poly(ctx, [-18, oy - 8, -14, oy - 14, -10, oy - 8], '#f3f0e6');
+      return;
+    }
     poly(ctx, [-27, oy + 3, -13, oy - 13, -3, oy + 6], '#9f9985');
     poly(ctx, [-13, oy - 13, -3, oy + 6, -8, oy + 7], '#7f7a68');
     poly(ctx, [-22, oy + 3, 0, oy - 28, 3, oy + 9], '#bab4a0');
@@ -1045,8 +1559,7 @@ window.TESSEL_CONFIG = {
     poly(ctx, [-6, oy - 19, 0, oy - 28, 6, oy - 18, 1, oy - 16, -2, oy - 18], '#f3f0e6');
   }
 
-  // ---------- resources ----------
-  function drawResource(ctx, r, oy, onMountain) {
+  function drawResource(ctx, r, oy, onMountain, t, i) {
     const y = onMountain ? oy + 3 : oy;
     const x = onMountain ? 10 : 0;
     ctx.save(); ctx.translate(x, y);
@@ -1055,48 +1568,58 @@ window.TESSEL_CONFIG = {
         circle(ctx, -4, -3, 6, '#3f8036'); circle(ctx, 4, -2, 5.5, '#2f6a2b'); circle(ctx, 0, -7, 5.5, '#4a9140');
         circle(ctx, -4, -6, 1.8, '#ef4f6c'); circle(ctx, 3, -4, 1.8, '#ef4f6c'); circle(ctx, -1, -1, 1.8, '#ffb13b'); circle(ctx, 5, -8, 1.6, '#ef4f6c');
         break;
-      case 'game':
+      case 'game': {
+        const hop = Math.max(0, Math.sin(t / 900 + hash(i) * 9)) > 0.97 ? -2 : 0;
+        ctx.translate(0, hop);
         line(ctx, -5, -6, -6, 1, '#5a3a22', 1.5); line(ctx, -2, -6, -2, 1, '#5a3a22', 1.5);
         line(ctx, 4, -6, 4, 1, '#5a3a22', 1.5); line(ctx, 7, -6, 7.5, 1, '#5a3a22', 1.5);
-        ctx.beginPath(); ctx.ellipse(1, -8, 8, 4.2, 0, 0, Math.PI * 2); ctx.fillStyle = '#b07a45'; ctx.fill();
+        ellipse(ctx, 1, -8, 8, 4.2, '#b07a45');
         poly(ctx, [7, -10, 11, -16, 13, -13, 9, -8], '#a06a3a');
         line(ctx, 11, -16, 9, -21, '#e7d7b5', 1.2); line(ctx, 12, -16, 15, -20, '#e7d7b5', 1.2);
         break;
+      }
       case 'crop':
         for (let k = -9; k <= 9; k += 4.5) {
-          line(ctx, k, 3, k + 1, -9, '#b58f2c', 1.4);
-          ctx.beginPath(); ctx.ellipse(k + 1, -10, 1.7, 3.2, 0.1, 0, Math.PI * 2); ctx.fillStyle = '#ecc653'; ctx.fill();
+          const sway = Math.sin(t / 700 + k) * 0.8;
+          line(ctx, k, 3, k + 1 + sway, -9, '#b58f2c', 1.4);
+          ctx.beginPath(); ctx.ellipse(k + 1 + sway, -10, 1.7, 3.2, 0.1, 0, Math.PI * 2); ctx.fillStyle = '#ecc653'; ctx.fill();
         }
         break;
-      case 'fish':
+      case 'fish': {
+        const sw = Math.sin(t / 500 + hash(i) * 6) * 2;
         ctx.beginPath(); ctx.ellipse(0, 3, 12, 4.5, 0, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.2; ctx.stroke();
-        ctx.beginPath(); ctx.ellipse(-1, -1, 7, 3.4, 0, 0, Math.PI * 2); ctx.fillStyle = '#f08a3c'; ctx.fill();
+        ctx.translate(sw, 0);
+        ellipse(ctx, -1, -1, 7, 3.4, '#f08a3c');
         poly(ctx, [5, -1, 10, -5, 10, 3], '#d9702a');
         circle(ctx, -5, -1.8, 0.9, '#2b1a10');
         break;
+      }
       case 'ore':
         poly(ctx, [-9, 2, -6, -7, 3, -9, 9, -2, 6, 3], '#8d9098');
         poly(ctx, [3, -9, 9, -2, 6, 3, 1, -2], '#6c6f77');
         poly(ctx, [-3, -3, -1, -9, 2, -3], '#7fd8ea');
         break;
-      case 'farm':
-        ctx.save();
-        diamond(ctx, 0, 22, 11); ctx.fillStyle = '#d7b44a'; ctx.fill(); ctx.clip();
-        for (let k = -24; k <= 24; k += 6) line(ctx, k, -12, k + 12, 12, 'rgba(120,150,50,0.8)', 2);
+      case 'whale': {
+        const ph = (t / 2600 + hash(i)) % 1;
+        ellipse(ctx, 0, 1, 13, 4, 'rgba(255,255,255,0.25)');
+        ellipse(ctx, 0, -1, 11, 4.5, '#3d5a73');
+        poly(ctx, [9, -2, 15, -8, 16, -1], '#324c62');
+        if (ph < 0.3) { const k = ph / 0.3; for (let n = -1; n <= 1; n++) circle(ctx, -3 + n * 2.5 * k, -6 - 10 * k, 1.6, `rgba(255,255,255,${1 - k})`); }
+        break;
+      }
+      case 'starfish': {
+        ctx.save(); ctx.rotate(Math.sin(t / 1600 + hash(i) * 5) * 0.2);
+        ctx.beginPath();
+        for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 2.6 : 7; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr * 0.7); }
+        ctx.closePath(); ctx.fillStyle = '#ff8c5a'; ctx.fill(); ctx.strokeStyle = '#c85a30'; ctx.lineWidth = 1; ctx.stroke();
         ctx.restore();
         break;
-      case 'mine':
-        poly(ctx, [-11, 3, -7, -8, 4, -11, 11, -2, 8, 4], '#7c7e84');
-        poly(ctx, [4, -11, 11, -2, 8, 4, 2, -3], '#606268');
-        ctx.beginPath(); ctx.moveTo(-5, 3); ctx.lineTo(-5, -2); ctx.quadraticCurveTo(-1, -8, 3, -2); ctx.lineTo(3, 3); ctx.closePath();
-        ctx.fillStyle = '#2c2c30'; ctx.fill();
-        line(ctx, -6, 3.5, 4, 3.5, '#8a6a42', 1.6);
-        break;
+      }
     }
     ctx.restore();
   }
 
-  // ---------- cities ----------
+  // ---------- buildings ----------
   function house(ctx, x, y, s, roof, wallL = '#f1e6cc', wallR = '#d6c6a2') {
     const hw = 7 * s, hh = 3.5 * s, h = 8 * s, rh = 7 * s;
     poly(ctx, [x - hw, y, x, y + hh, x, y + hh - h, x - hw, y - h], wallL);
@@ -1105,12 +1628,137 @@ window.TESSEL_CONFIG = {
     poly(ctx, [x, y + hh - h, x + hw, y - h, x, y - h - rh], shade(roof, -35));
     ctx.fillStyle = 'rgba(40,30,20,0.55)'; ctx.fillRect(x - hw * 0.55, y - h * 0.55, 2 * s, 3.2 * s);
   }
+  function levelDots(ctx, n, y) {
+    for (let k = 0; k < n; k++) circle(ctx, -((n - 1) * 3.5) + k * 7, y, 2.1, '#fff3b0', 'rgba(0,0,0,0.35)', 0.8);
+  }
+  function drawBuilding(ctx, T, oy, t, col) {
+    const b = T.b;
+    switch (b) {
+      case 'farm':
+        ctx.save();
+        diamond(ctx, oy, 24, 12); ctx.fillStyle = '#d7b44a'; ctx.fill(); ctx.clip();
+        for (let k = -26; k <= 26; k += 6) line(ctx, k, oy - 12, k + 12, oy + 12, 'rgba(120,150,50,0.8)', 2);
+        ctx.restore();
+        break;
+      case 'mine':
+        poly(ctx, [-2, oy + 3, 2, oy - 8, 13, oy - 11, 20, oy - 2, 17, oy + 4], '#7c7e84');
+        ctx.beginPath(); ctx.moveTo(4, oy + 3); ctx.lineTo(4, oy - 2); ctx.quadraticCurveTo(8, oy - 8, 12, oy - 2); ctx.lineTo(12, oy + 3); ctx.closePath();
+        ctx.fillStyle = '#2c2c30'; ctx.fill();
+        line(ctx, 3, oy + 3.5, 13, oy + 3.5, '#8a6a42', 1.6);
+        break;
+      case 'lumber':
+        box(ctx, 2, oy + 3, 8, 7, '#8a5a35', '#b07a45', '#8e6038');
+        poly(ctx, [-6, oy - 4, 2, oy - 8, 10, oy - 4, 2, oy - 13], '#6b4424');
+        for (let k = 0; k < 3; k++) { ellipse(ctx, -12 + k * 3, oy + 6 - k, 2.2, 2.2, '#c89a62'); circle(ctx, -12 + k * 3, oy + 6 - k, 1, '#8a6a42'); }
+        break;
+      case 'port':
+        poly(ctx, [-16, oy, 0, oy - 8, 16, oy, 0, oy + 8], '#a67c52', '#6b4a2b', 1);
+        for (let k = -12; k <= 12; k += 4) line(ctx, k, oy - 6 + Math.abs(k) * 0, k + 4, oy + 2, 'rgba(90,60,30,0.45)', 1);
+        line(ctx, -14, oy, -14, oy - 12, '#6b4a2b', 2); line(ctx, 14, oy, 14, oy - 12, '#6b4a2b', 2);
+        poly(ctx, [-14, oy - 12, -14, oy - 7, -7, oy - 9.5], col || '#ddd');
+        break;
+      case 'sawmill': {
+        box(ctx, 0, oy + 4, 11, 9, '#9a6b3f', '#c69260', '#a67545');
+        const a = t / 300;
+        ctx.save(); ctx.translate(8, oy - 6);
+        circle(ctx, 0, 0, 6, '#cfd4da', '#7f858c', 1);
+        for (let k = 0; k < 8; k++) { const ang = a + k * Math.PI / 4; line(ctx, Math.cos(ang) * 4, Math.sin(ang) * 4, Math.cos(ang) * 7, Math.sin(ang) * 7, '#9aa0a8', 1.2); }
+        circle(ctx, 0, 0, 1.5, '#555');
+        ctx.restore();
+        levelDots(ctx, Math.min(T.bl || 0, 8), oy + 11);
+        break;
+      }
+      case 'windmill': {
+        poly(ctx, [-7, oy + 4, -4, oy - 20, 4, oy - 20, 7, oy + 4], '#efe2c2', 'rgba(0,0,0,0.2)', 1);
+        poly(ctx, [-5, oy - 20, 0, oy - 27, 5, oy - 20], '#b5533f');
+        const a = t / 700;
+        ctx.save(); ctx.translate(0, oy - 18);
+        for (let k = 0; k < 4; k++) {
+          const ang = a + k * Math.PI / 2;
+          const cx = Math.cos(ang), cy = Math.sin(ang);
+          poly(ctx, [cx * 2, cy * 2, cx * 15 - cy * 3, cy * 15 + cx * 3, cx * 15, cy * 15], '#f7f1e2', 'rgba(0,0,0,0.25)', 0.8);
+        }
+        circle(ctx, 0, 0, 2, '#6b4424');
+        ctx.restore();
+        levelDots(ctx, Math.min(T.bl || 0, 8), oy + 9);
+        break;
+      }
+      case 'forge': {
+        box(ctx, 0, oy + 4, 11, 9, '#5d5f66', '#7c7f87', '#62646b');
+        ctx.fillStyle = '#44464d'; ctx.fillRect(4, oy - 20, 5, 12);
+        const g = 0.6 + 0.4 * Math.sin(t / 150);
+        ellipse(ctx, -5, oy - 1, 3, 2.5, `rgba(255,${120 + 60 * g},40,${0.7 + 0.3 * g})`);
+        for (let k = 0; k < 3; k++) {
+          const ph = ((t / 1800) + k / 3) % 1;
+          circle(ctx, 6.5 + ph * 4, oy - 22 - ph * 14, 2 + ph * 3, `rgba(200,200,205,${0.5 * (1 - ph)})`);
+        }
+        levelDots(ctx, Math.min(T.bl || 0, 8), oy + 11);
+        break;
+      }
+      case 'market':
+        box(ctx, 0, oy + 4, 11, 6, '#e7d6ae', '#f1e6cc', '#d6c6a2');
+        for (let k = 0; k < 4; k++) poly(ctx, [-11 + k * 5.5, oy - 4 - k * 0 , -5.5 + k * 5.5, oy - 4, -5.5 + k * 5.5, oy - 12, -11 + k * 5.5, oy - 12], k % 2 ? '#fff4e0' : (col || '#d9534f'));
+        line(ctx, -11, oy - 12, 11, oy - 12, 'rgba(0,0,0,0.3)', 1);
+        circle(ctx, -4, oy + 1, 2, '#ffcf3d'); circle(ctx, 2, oy + 2, 2, '#ef4f6c'); circle(ctx, 6, oy, 2, '#8bd35a');
+        break;
+      case 'temple': case 'foresttemple': case 'mountaintemple': case 'watertemple': {
+        const stone = { temple: ['#f4ecd8', '#ddd2b8', '#c9bd9f'], foresttemple: ['#7fae5c', '#5f8f45', '#4d7838'], mountaintemple: ['#c9c6bd', '#a9a59a', '#8f8b80'], watertemple: ['#bfe9f0', '#8fd0dc', '#6fb8c6'] }[b];
+        box(ctx, 0, oy + 5, 15, 4, stone[0], stone[1], stone[2]);
+        box(ctx, 0, oy + 1, 11, 4, stone[0], stone[1], stone[2]);
+        box(ctx, 0, oy - 3, 7, 7, stone[0], stone[1], stone[2]);
+        poly(ctx, [-8, oy - 10, 0, oy - 14, 8, oy - 10, 0, oy - 21], col || '#d9534f');
+        const glow = 0.4 + 0.3 * Math.sin(t / 600);
+        circle(ctx, 0, oy - 23, 2.2, `rgba(255,240,170,${glow + 0.3})`);
+        levelDots(ctx, T.bl || 1, oy + 13);
+        break;
+      }
+      default: {
+        const B = R.BUILDINGS[b];
+        if (B && B.monument) drawMonument(ctx, b, oy, t, col);
+      }
+    }
+  }
+  function drawMonument(ctx, b, oy, t, col) {
+    const gold = '#f2c14e', goldD = '#c8922c';
+    box(ctx, 0, oy + 5, 16, 4, '#e9e2cf', '#cfc6ae', '#b9af95');
+    const shine = 0.5 + 0.5 * Math.sin(t / 500);
+    switch (b) {
+      case 'altar': box(ctx, 0, oy + 1, 8, 6, '#f7f3ea', '#e0d9c7', '#c9c1ab'); circle(ctx, 0, oy - 12, 4 + shine, `rgba(255,236,160,${0.6 + 0.3 * shine})`); break;
+      case 'tower': box(ctx, 0, oy + 1, 6, 26, '#ece6d6', '#d4ccb6', '#bdb49c'); poly(ctx, [-6, oy - 25, 0, oy - 38, 6, oy - 25], gold, goldD, 1); break;
+      case 'tomb': poly(ctx, [-14, oy + 3, 0, oy - 26, 14, oy + 3], gold, goldD, 1); poly(ctx, [0, oy - 26, 14, oy + 3, 0, oy + 8], goldD); break;
+      case 'eye': box(ctx, 0, oy + 1, 7, 14, '#ece6d6', '#d4ccb6', '#bdb49c'); ellipse(ctx, 0, oy - 20, 8, 5, '#ffffff'); circle(ctx, 0, oy - 20, 3, '#3a86c8'); circle(ctx, 0, oy - 20, 1.2, '#10263a'); break;
+      case 'gate': box(ctx, -9, oy + 1, 4, 22, '#b8b2a2', '#9e988a', '#878173'); box(ctx, 9, oy + 1, 4, 22, '#b8b2a2', '#9e988a', '#878173'); poly(ctx, [-13, oy - 21, 13, oy - 21, 13, oy - 26, -13, oy - 26], col || gold, 'rgba(0,0,0,0.3)', 1); break;
+      case 'bazaar': for (let k = 0; k < 3; k++) { poly(ctx, [-12 + k * 8, oy - 2, -8 + k * 8, oy - 14, -4 + k * 8, oy - 2], k % 2 ? gold : (col || '#d9534f')); } break;
+      case 'fortune': tree(ctx, -7, oy + 1, 0.8); tree(ctx, 7, oy + 1, 0.8); circle(ctx, 0, oy - 8, 4, gold, goldD, 1); break;
+    }
+    for (let k = 0; k < 3; k++) {
+      const ph = ((t / 2000) + k / 3) % 1;
+      circle(ctx, Math.sin(ph * 6 + k) * 10, oy - 6 - ph * 26, 1.2, `rgba(255,240,170,${1 - ph})`);
+    }
+  }
+  function drawRuin(ctx, oy, water) {
+    if (water) {
+      poly(ctx, [-8, oy + 2, -5, oy - 10, -1, oy - 8, 0, oy + 3], '#b9b3a3');
+      poly(ctx, [3, oy + 2, 5, oy - 5, 9, oy - 4, 9, oy + 2], '#a39d8d');
+      return;
+    }
+    poly(ctx, [-14, oy + 4, 0, oy - 3, 14, oy + 4, 0, oy + 11], '#cfc6ae');
+    box(ctx, -8, oy + 2, 3, 14, '#e2dac5', '#c9c0a8', '#b3aa91');
+    box(ctx, 7, oy + 4, 3, 8, '#e2dac5', '#c9c0a8', '#b3aa91');
+    poly(ctx, [-11, oy - 12, 2, oy - 18, 4, oy - 15, -9, oy - 9], '#d6ceb8');
+    line(ctx, -9, oy + 1, -6, oy - 8, '#4a9140', 1.4); line(ctx, 8, oy + 3, 10, oy - 2, '#4a9140', 1.4);
+    circle(ctx, 1, oy + 5, 2, '#bdb49c');
+  }
+
+  // ---------- cities ----------
   const HOUSE_POS = [[0, 1], [-9, -3], [9, -3], [0, -7], [-10, 4], [10, 4]];
-  function drawCity(ctx, s, c, oy) {
+  function drawCity(ctx, s, c, oy, t) {
     if (c.owner == null) {
       house(ctx, -6, oy - 1, 0.95, '#b5733f', '#e2cfa6', '#c4ad82');
       house(ctx, 8, oy + 3, 0.75, '#9c5f33', '#e2cfa6', '#c4ad82');
       line(ctx, -16, oy + 7, -4, oy + 12, '#8a6a42', 1.4);
+      const sm = (t / 2400) % 1;
+      circle(ctx, -3 + sm * 3, oy - 20 - sm * 10, 1.5 + sm * 2, `rgba(230,230,230,${0.6 * (1 - sm)})`);
       return;
     }
     const col = R.colorOf(s, c.owner);
@@ -1123,108 +1771,187 @@ window.TESSEL_CONFIG = {
     const spots = HOUSE_POS.slice(0, n).sort((a, b) => a[1] - b[1]);
     if (c.capital) {
       line(ctx, -2, oy - 8, -2, oy - 38, '#5a4630', 1.6);
-      poly(ctx, [-2, oy - 38, 11, oy - 34, -2, oy - 29], col);
+      const w = Math.sin(t / 300) * 1.5;
+      ctx.beginPath(); ctx.moveTo(-2, oy - 38); ctx.quadraticCurveTo(4, oy - 38 + w, 11, oy - 34 + w); ctx.quadraticCurveTo(4, oy - 31 - w, -2, oy - 29); ctx.closePath();
+      ctx.fillStyle = col; ctx.fill();
     }
     for (const [x, y] of spots) house(ctx, x, oy + y, 1, col);
-    if (c.park) {
-      tree(ctx, 16, oy + 1, 0.55); tree(ctx, -17, oy + 1, 0.55);
-    }
+    if (c.level > 6) { box(ctx, 0, oy - 9, 5, 10, shade(col, 30), '#efe3c7', '#d3c3a0'); }
+    if (c.park) { tree(ctx, 16, oy + 1, 0.55); tree(ctx, -17, oy + 1, 0.55); }
+    if (c.workshop) { ctx.fillStyle = '#6b6f78'; ctx.fillRect(12, oy - 8, 3, 7); }
   }
 
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-  }
   function drawLabel(ctx, s, c, sx, sy, z) {
     if (c.owner == null) return;
     const col = R.colorOf(s, c.owner);
+    const light = c.owner != null && R.P(s, c.owner).tribe === 'frost';
     const fs = Math.round(Math.max(10, Math.min(14, 11.5 * z)));
     ctx.font = `700 ${fs}px "Baloo 2", "Trebuchet MS", sans-serif`;
     const tw = ctx.measureText(c.name).width;
     const badge = fs + 4;
     const w = tw + badge + 14, h = fs + 8;
-    const x = sx - w / 2, y = sy - 44 * z - h;
+    const x = sx - w / 2, y = sy - 46 * z - h;
     roundRect(ctx, x, y, w, h, h / 2); ctx.fillStyle = col; ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
     circle(ctx, x + badge / 2 + 3, y + h / 2, badge / 2 - 1, 'rgba(0,0,0,0.28)');
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(c.level), x + badge / 2 + 3, y + h / 2 + 1);
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.fillText(String(c.level), x + badge / 2 + 3, y + h / 2 + 1);
+    ctx.textAlign = 'left'; ctx.fillStyle = light ? '#1c2b35' : '#fff';
     ctx.fillText(c.name, x + badge + 8, y + h / 2 + 1);
-    // population pips
-    const slots = c.level + 1, pr = Math.max(2.4, 2.6 * Math.min(z, 1.3)), gap = pr * 2.8;
-    const px = sx - ((slots - 1) * gap) / 2, py = y + h + pr + 3;
-    for (let k = 0; k < slots; k++) circle(ctx, px + k * gap, py, pr, k < c.pop ? '#ffffff' : 'rgba(10,30,40,0.55)', 'rgba(0,0,0,0.3)', 1);
+    if (c.capital) {
+      ctx.fillStyle = '#ffd34d';
+      const cx = x + w - 2, cy = y - 1;
+      ctx.beginPath(); ctx.moveTo(cx - 6, cy + 3); ctx.lineTo(cx - 6, cy - 3); ctx.lineTo(cx - 3, cy); ctx.lineTo(cx, cy - 5); ctx.lineTo(cx + 3, cy); ctx.lineTo(cx + 6, cy - 3); ctx.lineTo(cx + 6, cy + 3); ctx.closePath(); ctx.fill();
+    }
+    // population bar: one segment per population needed for the next level
+    const need = c.level + 1, segW = Math.max(5, Math.min(10, 7 * z)), gap = 2, bh = Math.max(4, 5 * Math.min(z, 1.2));
+    const bw = need * segW + (need - 1) * gap;
+    let bx = sx - bw / 2;
+    const by = y + h + 3;
+    roundRect(ctx, bx - 2, by - 2, bw + 4, bh + 4, 3); ctx.fillStyle = 'rgba(10,30,40,0.7)'; ctx.fill();
+    for (let k = 0; k < need; k++) {
+      ctx.fillStyle = k < c.pop ? '#8fe0ff' : c.pop < 0 && k < -c.pop ? '#ff7a6b' : 'rgba(255,255,255,0.18)';
+      ctx.fillRect(bx, by, segW, bh);
+      bx += segW + gap;
+    }
   }
 
   // ---------- units ----------
-  function person(ctx, col, sc = 1, dy = 0) {
+  function hat(ctx, tribe, col) {
+    switch (tribe) {
+      case 'horn': poly(ctx, [-4, -20, -8, -25, -3.5, -22.5], '#f3ead2', '#b8a882', 0.6); poly(ctx, [4, -20, 8, -25, 3.5, -22.5], '#f3ead2', '#b8a882', 0.6); break;
+      case 'reed': poly(ctx, [-8, -19.5, 0, -26, 8, -19.5], '#dcc07a', '#a8893f', 0.8); break;
+      case 'plain': line(ctx, -4.6, -18.5, 4.6, -18.5, shade(col, -60), 1.8); line(ctx, 3, -19, 6, -26, '#ffffff', 1.4); break;
+      case 'stone': ctx.beginPath(); ctx.arc(0, -18, 5.2, Math.PI, 0); ctx.fillStyle = '#8f8b80'; ctx.fill(); line(ctx, -5.2, -18, 5.2, -18, '#6f6b60', 1.2); break;
+      case 'grove': for (let k = -1; k <= 1; k++) ellipse(ctx, k * 3.5, -21.5, 2, 3, '#4fae3f'); break;
+      case 'mesa': ctx.beginPath(); ctx.ellipse(0, -20.5, 5.5, 3.2, 0, Math.PI, 0); ctx.fillStyle = '#f0dcc0'; ctx.fill(); line(ctx, -5, -19.5, 5, -19.5, shade(col, -30), 1.4); break;
+      case 'frost': ctx.beginPath(); ctx.arc(0, -17.5, 5.8, Math.PI * 0.95, Math.PI * 0.05); ctx.strokeStyle = '#cfd8de'; ctx.lineWidth = 2.4; ctx.stroke(); break;
+      case 'dusk': poly(ctx, [-5, -16, 0, -26, 5, -16, 0, -19], '#27306e'); break;
+    }
+  }
+  function person(ctx, col, tribe, sc = 1, dy = 0, robe) {
     ctx.save(); ctx.translate(0, dy); ctx.scale(sc, sc);
-    ctx.beginPath(); ctx.moveTo(-6, 2); ctx.lineTo(6, 2); ctx.lineTo(4.5, -11); ctx.quadraticCurveTo(0, -14.5, -4.5, -11); ctx.closePath();
-    ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = shade(col, -60); ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.beginPath();
+    if (robe) { ctx.moveTo(-7, 2); ctx.lineTo(7, 2); ctx.lineTo(4, -12); ctx.quadraticCurveTo(0, -15, -4, -12); }
+    else { ctx.moveTo(-6, 2); ctx.lineTo(6, 2); ctx.lineTo(4.5, -11); ctx.quadraticCurveTo(0, -14.5, -4.5, -11); }
+    ctx.closePath();
+    ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = shade(col, -70); ctx.lineWidth = 1.2; ctx.stroke();
     poly(ctx, [0, -13.5, 4.5, -11, 6, 2, 0, 2], 'rgba(0,0,0,0.14)');
     circle(ctx, 0, -17, 4.6, '#f2d6ae', '#b58e62', 1);
+    circle(ctx, 1.6, -17.4, 0.7, '#3a2a1a');
+    hat(ctx, tribe, col);
     ctx.restore();
   }
   function horse(ctx, col) {
     line(ctx, -8, -4, -9, 3, shade(col, -50), 2); line(ctx, -4, -4, -4, 3, shade(col, -50), 2);
     line(ctx, 5, -4, 5, 3, shade(col, -50), 2); line(ctx, 9, -4, 10, 3, shade(col, -50), 2);
-    ctx.beginPath(); ctx.ellipse(0, -6, 11, 5, 0, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
-    ctx.strokeStyle = shade(col, -60); ctx.lineWidth = 1; ctx.stroke();
+    ellipse(ctx, 0, -6, 11, 5, col);
     poly(ctx, [8, -8, 13, -17, 16, -14, 11, -4], col, shade(col, -60), 1);
     line(ctx, -11, -6, -15, -1, shade(col, -40), 2);
   }
-  function drawUnit(ctx, s, u, oy, dim, ringed) {
-    const col = R.colorOf(s, u.owner);
-    const water = R.isWater(s.tiles[u.at].t);
-    ctx.save(); ctx.translate(0, oy);
-    if (ringed) {
-      ctx.beginPath(); ctx.ellipse(0, 2, 17, 8.5, 0, 0, Math.PI * 2);
+  function drawUnitBody(ctx, s, u, t) {
+    const p = R.P(s, u.owner);
+    const col = p ? R.TRIBES[p.tribe].color : '#999';
+    const tribe = p ? p.tribe : 'horn';
+    if (u.boat) {
+      const rock = Math.sin(t / 500 + strHash(u.id)) * 0.06;
+      ctx.save(); ctx.rotate(rock);
+      if (u.boat === 'battleship') {
+        poly(ctx, [-17, -3, 17, -3, 12, 6, -12, 6], '#4b5563', '#2d333b', 1);
+        poly(ctx, [-17, -3, 17, -3, 16, -1, -16, -1], col);
+        box(ctx, -2, -3, 6, 6, '#6b7280', '#565d68', '#454b55');
+        line(ctx, 2, -7, 14, -11, '#2d333b', 2.4);
+        line(ctx, -2, -9, -2, -24, '#2d333b', 1.4);
+        poly(ctx, [-2, -24, 8, -21, -2, -18], col);
+      } else if (u.boat === 'ship') {
+        poly(ctx, [-16, -3, 16, -3, 11, 6, -11, 6], '#8a5a35', '#5a3a22', 1);
+        poly(ctx, [-16, -3, 16, -3, 15, -1, -15, -1], col);
+        line(ctx, -4, -3, -4, -28, '#5a3a22', 1.6); line(ctx, 6, -3, 6, -22, '#5a3a22', 1.4);
+        poly(ctx, [-3, -27, -3, -6, 8, -8], '#f4ecd8', 'rgba(0,0,0,0.2)', 1);
+        poly(ctx, [7, -21, 7, -6, 15, -7], '#f4ecd8', 'rgba(0,0,0,0.2)', 1);
+        poly(ctx, [-3, -16, -3, -12, 6, -10.5, 5, -14], col);
+      } else {
+        poly(ctx, [-14, -3, 14, -3, 9, 5, -9, 5], '#8a5a35', '#5a3a22', 1);
+        poly(ctx, [-14, -3, 14, -3, 13, -1, -13, -1], col);
+        line(ctx, 0, -3, 0, -27, '#5a3a22', 1.6);
+        poly(ctx, [1.5, -26, 1.5, -6, 14, -8], '#f4ecd8', 'rgba(0,0,0,0.2)', 1);
+        poly(ctx, [1.5, -15, 1.5, -11, 12, -9.5, 10, -13], col);
+      }
+      ctx.restore();
+      return;
+    }
+    switch (u.type) {
+      case 'warrior': person(ctx, col, tribe); line(ctx, 6, -5, 11, -17, '#7a5230', 2.6); break;
+      case 'archer':
+        person(ctx, col, tribe);
+        ctx.beginPath(); ctx.arc(7, -9, 7.5, -1.2, 1.2); ctx.strokeStyle = '#6b4424'; ctx.lineWidth = 1.8; ctx.stroke();
+        line(ctx, 9.7, -16, 9.7, -2, 'rgba(255,255,255,0.8)', 0.8); break;
+      case 'defender':
+        person(ctx, col, tribe);
+        roundRect(ctx, -11, -14, 9, 13, 3); ctx.fillStyle = shade(col, 45); ctx.fill();
+        ctx.strokeStyle = shade(col, -70); ctx.lineWidth = 1.4; ctx.stroke();
+        circle(ctx, -6.5, -7.5, 1.6, shade(col, -40)); break;
+      case 'swordsman':
+        person(ctx, col, tribe);
+        line(ctx, 7, -3, 9, -21, '#dfe3e8', 2.2); line(ctx, 5, -6, 10, -6.5, '#7a5230', 2); break;
+      case 'catapult':
+        circle(ctx, -8, 1, 3.5, '#6b4424'); circle(ctx, 8, 1, 3.5, '#6b4424');
+        poly(ctx, [-12, -3, 12, -3, 10, 0, -10, 0], '#9a6b3f', '#5a3a22', 1);
+        line(ctx, -6, -3, 3, -12, '#8a5a35', 2); line(ctx, 6, -3, 3, -12, '#8a5a35', 2);
+        line(ctx, -9, -4, 10, -20, '#7a5230', 2.2);
+        ellipse(ctx, 10.5, -21, 3, 2, '#5a3a22'); circle(ctx, 10.5, -22.5, 1.8, '#8d9098');
+        poly(ctx, [-11, -3, -11, -14, -5, -11], col); line(ctx, -11, -3, -11, -14, '#5a3a22', 1);
+        break;
+      case 'knight':
+        horse(ctx, '#e6e1d6'); person(ctx, col, tribe, 0.8, -8);
+        line(ctx, -8, -12, 19, -26, '#caa36a', 1.8); poly(ctx, [19, -26, 15, -22, 17, -21], '#dfe3e8'); break;
+      case 'rider': horse(ctx, '#8b5a33'); person(ctx, col, tribe, 0.8, -8); break;
+      case 'mindbender': {
+        person(ctx, col, tribe, 1, 0, true);
+        line(ctx, 8, 2, 8, -22, '#7a5230', 1.6);
+        const g = 0.6 + 0.4 * Math.sin(t / 250);
+        circle(ctx, 8, -24, 3.5 + g, `rgba(215,150,255,${0.35 * g})`);
+        circle(ctx, 8, -24, 2.3, '#e3b5ff', '#9b5bd0', 0.8);
+        break;
+      }
+      case 'giant': person(ctx, col, tribe, 1.65, 1); line(ctx, 9, -6, 17, -30, '#7a5230', 4); break;
+    }
+  }
+  function drawUnit(ctx, s, u, oy, o, t) {
+    const mods = o.anim && o.anim.off && o.anim.off.get(u.id);
+    const dim = o.viewer === u.owner && s.turnSlot === u.owner && R.isDone(s, u);
+    ctx.save();
+    const bob = dim ? 0 : Math.sin(t / 380 + strHash(u.id)) * 0.7;
+    ctx.translate(mods ? mods.dx : 0, oy + (mods ? mods.dy : 0));
+    if (mods && mods.alpha != null) ctx.globalAlpha = mods.alpha;
+    if (o.attackIds && o.attackIds.has(u.id)) {
+      const pulse = 1 + 0.08 * Math.sin(t / 150);
+      ctx.beginPath(); ctx.ellipse(0, 2, 17 * pulse, 8.5 * pulse, 0, 0, Math.PI * 2);
       ctx.strokeStyle = '#ff4d3d'; ctx.lineWidth = 3; ctx.stroke();
     }
-    if (dim) ctx.globalAlpha = 0.55;
-    ctx.beginPath(); ctx.ellipse(0, 3, 11, 5, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
-    if (water) {
-      poly(ctx, [-14, -3, 14, -3, 9, 5, -9, 5], '#8a5a35', '#5a3a22', 1);
-      poly(ctx, [-14, -3, 14, -3, 13, -1, -13, -1], col);
-      line(ctx, 0, -3, 0, -27, '#5a3a22', 1.6);
-      poly(ctx, [1.5, -26, 1.5, -6, 14, -8], '#f4ecd8', 'rgba(0,0,0,0.2)', 1);
-      poly(ctx, [1.5, -15, 1.5, -11, 12, -9.5, 10, -13], col);
-    } else {
-      switch (u.type) {
-        case 'warrior':
-          person(ctx, col); line(ctx, 6, -5, 11, -17, '#7a5230', 2.6); break;
-        case 'archer':
-          person(ctx, col);
-          ctx.beginPath(); ctx.arc(7, -9, 7.5, -1.2, 1.2); ctx.strokeStyle = '#6b4424'; ctx.lineWidth = 1.8; ctx.stroke();
-          line(ctx, 9.7, -16, 9.7, -2, 'rgba(255,255,255,0.8)', 0.8); break;
-        case 'defender':
-          person(ctx, col);
-          roundRect(ctx, -11, -14, 9, 13, 3); ctx.fillStyle = shade(col, 45); ctx.fill();
-          ctx.strokeStyle = shade(col, -60); ctx.lineWidth = 1.4; ctx.stroke();
-          circle(ctx, -6.5, -7.5, 1.6, shade(col, -40)); break;
-        case 'swordsman':
-          person(ctx, col);
-          line(ctx, 7, -3, 9, -21, '#dfe3e8', 2.2); line(ctx, 5, -6, 10, -6.5, '#7a5230', 2);
-          ctx.beginPath(); ctx.arc(0, -18, 5, Math.PI, 0); ctx.fillStyle = '#9aa0a8'; ctx.fill(); break;
-        case 'rider':
-          horse(ctx, '#8b5a33'); person(ctx, col, 0.8, -8); break;
-        case 'knight':
-          horse(ctx, '#e6e1d6'); person(ctx, col, 0.8, -8);
-          line(ctx, -8, -12, 19, -26, '#caa36a', 1.8); poly(ctx, [19, -26, 15, -22, 17, -21], '#dfe3e8'); break;
-        case 'giant':
-          person(ctx, col, 1.65, 1); line(ctx, 9, -6, 17, -30, '#7a5230', 4); break;
-      }
+    if (o.convertIds && o.convertIds.has(u.id)) {
+      const pulse = 1 + 0.08 * Math.sin(t / 150);
+      ctx.beginPath(); ctx.ellipse(0, 2, 17 * pulse, 8.5 * pulse, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = '#c98bff'; ctx.lineWidth = 3; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
     }
-    ctx.globalAlpha = 1;
-    const max = R.UNITS[u.type].hp;
-    const hy = u.type === 'giant' ? -34 : -21;
-    circle(ctx, 12, hy, 7, '#ffffff', col, 2.2);
+    ellipse(ctx, 0, 3, 11, 5, 'rgba(0,0,0,0.28)');
+    ctx.translate(0, bob);
+    if (mods && mods.scale != null) ctx.scale(mods.scale, mods.scale);
+    if (mods && mods.flash) { ctx.filter = 'brightness(2.2)'; }
+    if (dim) ctx.globalAlpha *= 0.55;
+    drawUnitBody(ctx, s, u, t);
+    ctx.filter = 'none';
+    ctx.globalAlpha = mods && mods.alpha != null ? mods.alpha : 1;
+    const max = R.maxHp(u);
+    const hy = u.type === 'giant' && !u.boat ? -34 : -21;
+    const p = R.P(s, u.owner), col = p ? R.TRIBES[p.tribe].color : '#999';
+    circle(ctx, 12, hy, 7, '#ffffff', col === '#e8eef2' ? '#9aa6ad' : col, 2.2);
     ctx.font = '800 9px "Baloo 2", "Trebuchet MS", sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = u.hp <= max / 3 ? '#d6392a' : '#1c2b35';
     ctx.fillText(String(Math.max(0, Math.round(u.hp))), 12, hy + 0.8);
+    if (u.vet) { ctx.fillStyle = '#ffd34d'; ctx.font = '800 9px sans-serif'; ctx.fillText('★', 12, hy - 9); }
+    else if (o.viewer === u.owner && R.canPromote(s, u)) { circle(ctx, 18, hy - 5, 3, '#ffd34d', '#b8891c', 1); }
     ctx.restore();
   }
 
@@ -1234,12 +1961,19 @@ window.TESSEL_CONFIG = {
     const wx = (x - y) * HW, wy = (x + y) * HH;
     return [(wx - cam.x) * cam.z + W / 2, (wy - cam.y) * cam.z + H / 2];
   }
+  function worldToScreen(wx, wy, cam, W, H) { return [(wx - cam.x) * cam.z + W / 2, (wy - cam.y) * cam.z + H / 2]; }
+  function tileWorld(s, i) {
+    const N = s.size, x = i % N, y = Math.floor(i / N);
+    return { x: (x - y) * HW, y: (x + y) * HH };
+  }
+  const tileLift = (s, i) => (R.isWater(s.tiles[i].t) ? 0 : -D);
 
   function drawWorld(ctx, s, o) {
-    const N = s.size, z = o.cam.z, W = o.W, H = o.H;
+    const N = s.size, z = o.cam.z, W = o.W, H = o.H, t = o.time || 0;
     const occ = new Map(Object.values(s.units).map((u) => [u.at, u]));
     const vis = (i) => o.viewer == null || R.isExplored(s, o.viewer, i);
     const ownerOf = (i) => R.tileOwner(s, i);
+    const ghosts = (o.anim && o.anim.ghosts) || new Map();
     const labels = [];
     const margin = 90 * z;
     for (let d = 0; d <= 2 * (N - 1); d++) {
@@ -1248,23 +1982,17 @@ window.TESSEL_CONFIG = {
         const [sx, sy] = tileScreen(s, i, o.cam, W, H);
         if (sx < -margin || sx > W + margin || sy < -margin || sy > H + margin) continue;
         ctx.save(); ctx.translate(sx, sy); ctx.scale(z, z);
-        if (!vis(i)) { drawFog(ctx, i); ctx.restore(); continue; }
+        if (!vis(i)) { drawFog(ctx, i, t); ctx.restore(); continue; }
         const T = s.tiles[i];
         const water = R.isWater(T.t);
         const oy = water ? 0 : -D;
-        drawGround(ctx, T, i);
+        drawGround(ctx, T, i, t);
 
         const own = ownerOf(i);
         if (own != null) {
           const col = R.colorOf(s, own);
           diamond(ctx, oy); ctx.globalAlpha = 0.2; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
-          // borders where the neighbour belongs to someone else
-          const edges = [
-            [x + 1, y, [HW, oy, 0, oy + HH]],
-            [x - 1, y, [-HW, oy, 0, oy - HH]],
-            [x, y + 1, [0, oy + HH, -HW, oy]],
-            [x, y - 1, [0, oy - HH, HW, oy]],
-          ];
+          const edges = [[x + 1, y, [HW, oy, 0, oy + HH]], [x - 1, y, [-HW, oy, 0, oy - HH]], [x, y + 1, [0, oy + HH, -HW, oy]], [x, y - 1, [0, oy - HH, HW, oy]]];
           ctx.strokeStyle = col; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
           for (const [nx, ny, p] of edges) {
             const inb = nx >= 0 && ny >= 0 && nx < N && ny < N;
@@ -1272,64 +2000,104 @@ window.TESSEL_CONFIG = {
             ctx.beginPath(); ctx.moveTo(p[0] * 0.92, oy + (p[1] - oy) * 0.92); ctx.lineTo(p[2] * 0.92, oy + (p[3] - oy) * 0.92); ctx.stroke();
           }
         }
+        if (T.road && !water) drawRoad(ctx, s, i, oy);
         if (o.sel === i) {
+          const pulse = 0.5 + 0.5 * Math.sin(t / 220);
           diamond(ctx, oy, HW - 2, HH - 1);
           ctx.strokeStyle = '#fff6c9'; ctx.lineWidth = 2.5; ctx.stroke();
-          ctx.fillStyle = 'rgba(255,246,201,0.18)'; ctx.fill();
+          ctx.fillStyle = `rgba(255,246,201,${0.12 + 0.1 * pulse})`; ctx.fill();
         }
-
-        if (T.t === 'forest') drawForest(ctx, oy, i);
-        if (T.t === 'mountain') drawMountain(ctx, oy);
-        if (T.r) drawResource(ctx, T.r, oy, T.t === 'mountain');
-        if (T.city) { drawCity(ctx, s, s.cities[T.city], oy); labels.push([s.cities[T.city], sx, sy + oy * z]); }
+        const sparse = T.b && (T.b === 'lumber' || T.b === 'foresttemple');
+        if (T.t === 'forest') drawForest(ctx, oy, i, sparse);
+        if (T.t === 'mountain') drawMountain(ctx, oy, !!T.b);
+        if (T.r) drawResource(ctx, T.r, oy, T.t === 'mountain', t, i);
+        if (T.b) drawBuilding(ctx, T, oy, t, own != null ? R.colorOf(s, own) : null);
+        if (T.ruin) drawRuin(ctx, oy, water);
+        if (T.city) { drawCity(ctx, s, s.cities[T.city], oy, t); labels.push([s.cities[T.city], sx, sy + oy * z]); }
+        const gl = ghosts.get(i);
+        if (gl) for (const g of gl) drawUnit(ctx, s, g.unit, oy, { viewer: o.viewer, anim: { off: new Map([[g.unit.id, g]]) } }, t);
         const u = occ.get(i);
-        if (u) {
-          const dim = o.viewer === u.owner && s.turnSlot === u.owner && u.moved && u.attacked;
-          drawUnit(ctx, s, u, oy, dim, o.attackIds && o.attackIds.has(u.id));
-        }
+        if (u && !(o.anim && o.anim.hide && o.anim.hide.has(u.id))) drawUnit(ctx, s, u, oy, o, t);
         if (o.moves && o.moves.has(i)) {
-          circle(ctx, 0, oy, 5.5, 'rgba(255,255,255,0.85)', 'rgba(20,60,80,0.5)', 1.5);
+          const pulse = 1 + 0.12 * Math.sin(t / 200 + i);
+          circle(ctx, 0, oy, 5.5 * pulse, 'rgba(255,255,255,0.88)', 'rgba(20,60,80,0.5)', 1.5);
+        }
+        if (o.fogFade) {
+          const a = o.fogFade.get(i);
+          if (a) { ctx.globalAlpha = a; drawFog(ctx, i, t); ctx.globalAlpha = 1; }
         }
         ctx.restore();
       }
     }
     if (!o.noLabels && z > 0.5) for (const [c, sx, sy] of labels) drawLabel(ctx, s, c, sx, sy, z);
 
+    // effects in world space
+    if (o.anim && o.anim.fx) {
+      for (const f of o.anim.fx) {
+        if (f.type === 'arrow') {
+          const [sx, sy] = worldToScreen(f.x, f.y, o.cam, W, H);
+          ctx.save(); ctx.translate(sx, sy); ctx.scale(z, z); ctx.rotate(f.ang);
+          if (f.stone) circle(ctx, 0, 0, 3, '#8d9098', '#55585e', 1);
+          else { line(ctx, -7, 0, 5, 0, '#5a3a22', 1.6); poly(ctx, [7, 0, 3, -2.5, 3, 2.5], '#dfe3e8'); }
+          ctx.restore();
+        } else if (f.type === 'ring') {
+          const [sx, sy] = worldToScreen(f.x, f.y, o.cam, W, H);
+          ctx.save(); ctx.translate(sx, sy); ctx.scale(z, z);
+          ctx.globalAlpha = f.alpha;
+          ctx.beginPath(); ctx.ellipse(0, 0, f.r, f.r / 2, 0, 0, Math.PI * 2);
+          ctx.strokeStyle = f.color; ctx.lineWidth = 3; ctx.stroke();
+          ctx.restore();
+        } else if (f.type === 'spark') {
+          const [sx, sy] = worldToScreen(f.x, f.y, o.cam, W, H);
+          ctx.globalAlpha = f.alpha; circle(ctx, sx, sy, f.r * z, f.color); ctx.globalAlpha = 1;
+        } else if (f.type === 'beam') {
+          const [ax, ay] = worldToScreen(f.x1, f.y1, o.cam, W, H), [bx, by] = worldToScreen(f.x2, f.y2, o.cam, W, H);
+          ctx.globalAlpha = f.alpha; line(ctx, ax, ay, bx, by, '#d9a6ff', 3 * z); ctx.globalAlpha = 1;
+        }
+      }
+    }
+
     if (o.pops) {
-      const now = performance.now();
-      o.pops.forEach((p) => {
-        const t = (now - p.t) / 1300;
-        if (t > 1) return;
+      const now = o.time;
+      for (const p of o.pops) {
+        const k = (now - p.t) / 1400;
+        if (k < 0 || k > 1) continue;
         const [sx, sy] = tileScreen(s, p.at, o.cam, W, H);
-        ctx.globalAlpha = 1 - t * t;
-        ctx.font = `800 ${Math.round(15 * Math.max(0.9, Math.min(z, 1.4)))}px "Baloo 2", "Trebuchet MS", sans-serif`;
+        const ease = 1 - Math.pow(1 - Math.min(1, k * 3), 3);
+        ctx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+        const fs = Math.round(15 * Math.max(0.9, Math.min(z, 1.4)) * (0.7 + 0.3 * ease));
+        ctx.font = `800 ${fs}px "Baloo 2", "Trebuchet MS", sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,30,40,0.85)';
-        const ty = sy - (34 + t * 26) * z;
+        const ty = sy - (30 + ease * 18 + k * 12) * z - (p.row || 0) * 16;
         ctx.strokeText(p.text, sx, ty);
         ctx.fillStyle = p.color || '#fff'; ctx.fillText(p.text, sx, ty);
         ctx.globalAlpha = 1;
-      });
+      }
     }
   }
 
-  function pick(s, cam, W, H, px, py, viewer) {
-    const N = s.size;
-    // upright things (units, cities) first: frontmost wins
-    let best = null, bestDepth = -1;
-    const consider = (i, top, half) => {
+  // All units and cities whose sprite covers the point, nearest body first.
+  function pickAll(s, cam, W, H, px, py, viewer) {
+    const hits = [];
+    const consider = (i, top, half, kind) => {
       if (viewer != null && !R.isExplored(s, viewer, i)) return;
       const [sx, sy] = tileScreen(s, i, cam, W, H);
-      const oy = R.isWater(s.tiles[i].t) ? 0 : -D;
-      const y0 = sy + (oy + top) * cam.z, y1 = sy + (oy + 6) * cam.z;
+      const oy = tileLift(s, i);
+      const y0 = sy + (oy + top) * cam.z, y1 = sy + (oy + 5) * cam.z;
       if (px >= sx - half * cam.z && px <= sx + half * cam.z && py >= y0 && py <= y1) {
-        const depth = (i % N) + Math.floor(i / N);
-        if (depth > bestDepth) { bestDepth = depth; best = i; }
+        const cy = sy + (oy + top / 2) * cam.z;
+        hits.push({ i, kind, d: Math.hypot(px - sx, (py - cy) * 1.3) });
       }
     };
-    for (const u of Object.values(s.units)) consider(u.at, u.type === 'giant' ? -40 : -28, 13);
-    for (const c of Object.values(s.cities)) consider(c.at, -20, 20);
-    if (best != null) return best;
+    for (const u of Object.values(s.units)) consider(u.at, u.type === 'giant' && !u.boat ? -40 : -27, 12, 'unit');
+    for (const c of Object.values(s.cities)) consider(c.at, -18, 20, 'city');
+    return hits.sort((a, b) => a.d - b.d + (a.kind === 'city' ? 8 : 0) - (b.kind === 'city' ? 8 : 0));
+  }
+  function pick(s, cam, W, H, px, py, viewer) {
+    const hits = pickAll(s, cam, W, H, px, py, viewer);
+    if (hits.length) return hits[0].i;
+    const N = s.size;
     const wx = (px - W / 2) / cam.z + cam.x;
     const wy = (py - H / 2) / cam.z + cam.y + D;
     const x = Math.round((wx / HW + wy / HH) / 2);
@@ -1338,12 +2106,7 @@ window.TESSEL_CONFIG = {
     return y * N + x;
   }
 
-  function tileWorld(s, i) {
-    const N = s.size, x = i % N, y = Math.floor(i / N);
-    return { x: (x - y) * HW, y: (x + y) * HH };
-  }
-
-  root.Render = { HW, HH, D, drawWorld, pick, tileWorld, tileScreen };
+  root.Render = { HW, HH, D, drawWorld, pick, pickAll, tileWorld, tileScreen, tileLift };
 })(window);
 
 // Tessel app: accounts, lobby, invites, realtime turn sync and the in-game UI.
@@ -1411,34 +2174,53 @@ window.TESSEL_CONFIG = {
   }
 
   // ---------- hero island (auth screen) ----------
-  let heroState = null;
+  let heroState = null, heroLoop = false;
+  function buildHero() {
+    const s = R.generateState(
+      [{ slot: 0, userId: 'a', name: 'A', tribe: 'horn' }, { slot: 1, userId: 'b', name: 'B', tribe: 'reed' }],
+      { size: 9 }, 41
+    );
+    const N = 9;
+    const mk = (id, type, owner, at, extra) => { s.units[id] = Object.assign({ id, type, owner, at, hp: R.UNITS[type].hp, home: null, moved: false, attacked: false, acted: false, kills: 0, vet: false, boat: null }, extra || {}); };
+    const land = (i) => !R.isWater(s.tiles[i].t) && !s.tiles[i].city && !R.unitAt(s, i);
+    const c0 = Object.values(s.cities).find((c) => c.owner === 0);
+    c0.level = 3; c0.pop = 2; c0.wall = true;
+    const ring0 = R.around(N, c0.at, 1).filter(land);
+    if (ring0[0] != null) mk('x1', 'rider', 0, ring0[0]);
+    if (ring0[1] != null) { const T = s.tiles[ring0[1]]; T.t = 'field'; T.r = null; T.b = 'windmill'; T.bl = 2; }
+    if (ring0[2] != null) { const T = s.tiles[ring0[2]]; T.t = 'field'; T.r = null; T.road = true; }
+    const c1 = Object.values(s.cities).find((c) => c.owner === 1);
+    const ring1 = R.around(N, c1.at, 1).filter(land);
+    if (ring1[0] != null) mk('x2', 'archer', 1, ring1[0], { hp: 7 });
+    if (ring1[1] != null) { const T = s.tiles[ring1[1]]; T.t = 'field'; T.r = null; T.b = 'temple'; T.bl = 2; }
+    const sea = s.tiles.findIndex((T, i) => T.t === 'water' && !R.unitAt(s, i));
+    if (sea >= 0) mk('x3', 'warrior', 1, sea, { boat: 'ship' });
+    const village = Object.values(s.cities).find((c) => c.owner == null);
+    if (village) { village.owner = 1; s.tiles[village.at].terr = village.id; R.around(N, village.at, 1).forEach((j) => { if (s.tiles[j].terr == null) s.tiles[j].terr = village.id; }); }
+    return s;
+  }
   function drawHero(canvas) {
-    if (!heroState) {
-      heroState = R.generateState(
-        [{ slot: 0, userId: 'a', name: 'A', tribe: 'horn' }, { slot: 1, userId: 'b', name: 'B', tribe: 'reed' }],
-        { size: 9 }, 41
-      );
-      const s = heroState;
-      const free = (i) => !R.unitAt(s, i) && !R.isWater(s.tiles[i].t);
-      const c0 = Object.values(s.cities).find((c) => c.owner === 0);
-      c0.level = 3; c0.pop = 2; c0.wall = true;
-      const spot = R.around(9, c0.at, 1).find(free);
-      if (spot != null) s.units.x1 = { id: 'x1', type: 'rider', owner: 0, at: spot, hp: 10, home: null, moved: false, attacked: false };
-      const c1 = Object.values(s.cities).find((c) => c.owner === 1);
-      const spot2 = R.around(9, c1.at, 1).find(free);
-      if (spot2 != null) s.units.x2 = { id: 'x2', type: 'archer', owner: 1, at: spot2, hp: 7, home: null, moved: false, attacked: false };
-      const village = Object.values(s.cities).find((c) => c.owner == null);
-      if (village) { village.owner = 1; R.around(9, village.at, 1).forEach((j) => { if (s.tiles[j].terr == null) s.tiles[j].terr = village.id; }); s.tiles[village.at].terr = village.id; }
-    }
+    if (!heroState) heroState = buildHero();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = canvas.clientWidth || 360, H = canvas.clientHeight || 210;
-    canvas.width = W * dpr; canvas.height = H * dpr;
+    if (canvas.width !== Math.round(W * dpr)) { canvas.width = W * dpr; canvas.height = H * dpr; }
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     const N = heroState.size;
     const z = Math.min(W / (2 * N * V.HW + 20), H / (2 * N * V.HH + 70));
-    V.drawWorld(ctx, heroState, { viewer: null, cam: { x: 0, y: (N - 1) * V.HH - 8, z }, W, H, noLabels: true });
+    V.drawWorld(ctx, heroState, { viewer: null, cam: { x: 0, y: (N - 1) * V.HH - 8, z }, W, H, noLabels: true, time: performance.now() });
+    if (!heroLoop) {
+      heroLoop = true;
+      let last = 0;
+      const loop = (now) => {
+        const vis = !canvas.closest('.screen').hidden && !document.hidden;
+        if (!vis) { heroLoop = false; return; }
+        if (now - last > 50) { last = now; drawHero(canvas); }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    }
   }
 
   // ---------- auth ----------
@@ -1534,7 +2316,7 @@ window.TESSEL_CONFIG = {
       const lim = g.settings && g.settings.turnLimit;
       return h('button', { class: 'gitem' + (mine ? ' mine' : ''), onclick: () => (g.status === 'lobby' ? openRoom(g.id) : openGameById(g.id)) },
         h('b', {}, g.name), h('span', { class: 'tag' }, tag),
-        h('small', {}, `Code ${g.code}, ${g.settings.size}×${g.settings.size}, ${lim ? fmtLimit(lim) + ' turns' : 'no turn limit'}`));
+        h('small', {}, `Code ${g.code}, ${g.settings.mode === 'perfection' ? 'Perfection' : 'Domination'}, ${g.settings.size}×${g.settings.size}, ${lim ? fmtLimit(lim) + ' turns' : 'no limit'}`));
     }));
   }
 
@@ -1557,7 +2339,7 @@ window.TESSEL_CONFIG = {
       try {
         const res = await rpc('create_game', {
           p_name: $('#newName').value.trim() || `${ME.name}'s island`,
-          p_settings: { size: +$('#newSize').value, maxPlayers: +$('#newPlayers').value, turnLimit: +$('#newLimit').value },
+          p_settings: { size: +$('#newSize').value, maxPlayers: +$('#newPlayers').value, turnLimit: +$('#newLimit').value, mode: $('#newMode').value },
           p_tribe: $('#newTribe').value,
         });
         $('#newName').value = '';
@@ -1598,7 +2380,7 @@ window.TESSEL_CONFIG = {
     const g2 = ROOM.game, ps = ROOM.players, max = g2.settings.maxPlayers;
     const isHost = g2.host === ME.id;
     $('#roomName').textContent = g2.name;
-    $('#roomMeta').textContent = `${g2.settings.size}×${g2.settings.size} map, ${g2.settings.turnLimit ? fmtLimit(g2.settings.turnLimit) + ' per turn' : 'no turn limit'}`;
+    $('#roomMeta').textContent = `${g2.settings.mode === 'perfection' ? 'Perfection, 30 rounds' : 'Domination'}, ${g2.settings.size}×${g2.settings.size} map, ${g2.settings.turnLimit ? fmtLimit(g2.settings.turnLimit) + ' per turn' : 'no turn limit'}`;
     $('#roomCode').textContent = g2.code;
     $('#roomCount').textContent = `Players ${ps.length} of ${max}`;
     $('#roomPlayers').replaceChildren(...ps.map((p) =>
@@ -1648,7 +2430,7 @@ window.TESSEL_CONFIG = {
         if (ps.length < 2) throw new Error('You need at least 2 players');
         const roster = ps.map((p, k) => ({ slot: k, userId: p.userId, name: p.name, tribe: p.tribe }));
         const seed = (Math.random() * 2 ** 31) | 0;
-        const state = R.generateState(roster, { size: ROOM.game.settings.size }, seed);
+        const state = R.generateState(roster, { size: ROOM.game.settings.size, mode: ROOM.game.settings.mode }, seed);
         await rpc('start_game', { p_game: ROOM.id, p_state: state });
         const g = await fetchGame(ROOM.id);
         openGame(g);
@@ -1658,13 +2440,179 @@ window.TESSEL_CONFIG = {
 
   // ---------- game ----------
   const G = {
-    game: null, state: null, version: 0, me: null,
-    cam: { x: 0, y: 0, z: 1 }, sel: null, focus: 'tile', selUnit: null, moves: null, attackIds: null,
-    pops: [], saving: false, dirty: false, pendingAdvance: false, autoEndKey: null, skipAt: 0, modal: null,
+    game: null, state: null, version: 0, me: null, seenSeq: 0,
+    cam: { x: 0, y: 0, z: 1 }, camTarget: null, sel: null, focus: 'tile', selUnit: null,
+    moves: null, attackIds: null, convertIds: null,
+    saving: false, dirty: false, pendingAdvance: false, autoEndKey: null, skipAt: 0, modal: null,
   };
   const cv = $('#map'), ctx = cv.getContext('2d');
+
   let W = 0, H = 0;
 
+  // ---------- animation director ----------
+  const A = { queue: [], cur: null, pops: [], fx: [], fogFade: new Map() };
+  const DUR = { move: 0, attack: 460, die: 380, convert: 560, train: 420, level: 700, capture: 520, build: 360, heal: 520 };
+  const easeOut = (k) => 1 - Math.pow(1 - k, 3);
+  const easeBack = (k) => { const c = 1.7; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+
+  function eventVisible(e) {
+    const s = G.state;
+    if (G.me == null) return true;
+    const seen = (i) => i != null && i >= 0 && i < s.tiles.length && R.isExplored(s, G.me, i);
+    if (e.k === 'move') return e.path.some(seen);
+    if (e.k === 'attack' || e.k === 'convert') return seen(e.from) || seen(e.to);
+    return e.at == null || seen(e.at);
+  }
+  function playEvents(evs, remote) {
+    for (const e of evs) {
+      if (['tech', 'turn', 'elim'].includes(e.k)) continue;
+      if (remote && !eventVisible(e)) continue;
+      A.queue.push({ e, remote });
+    }
+    if (A.queue.length > 60) A.queue.splice(0, A.queue.length - 60);
+  }
+  function animating() { return !!A.cur || A.queue.length > 0; }
+
+  function stepAnim(now) {
+    let guard = 0;
+    while (guard++ < 50) {
+      if (A.cur && now - A.cur.t0 < A.cur.dur) break;
+      if (A.cur) A.cur = null;
+      const next = A.queue.shift();
+      if (!next) break;
+      const e = next.e;
+      if (e.k === 'pop') {
+        const row = A.pops.filter((p) => p.at === e.at && now - p.t < 350).length;
+        A.pops.push({ at: e.at, text: e.text, color: e.color, t: now, row });
+        continue;
+      }
+      let dur = DUR[e.k] || 0;
+      if (e.k === 'move') dur = Math.max(160, 150 * (e.path.length - 1));
+      A.cur = { e, t0: now, dur, remote: next.remote };
+      // floating numbers that belong to this event appear when the blow lands
+      const delay = e.k === 'attack' ? (e.ranged ? 0.7 : 0.3) * dur : e.k === 'move' ? dur : 0;
+      while (A.queue.length && A.queue[0].e.k === 'pop') {
+        const pe = A.queue.shift().e;
+        const row = A.pops.filter((p) => p.at === pe.at && Math.abs(now + delay - p.t) < 350).length;
+        A.pops.push({ at: pe.at, text: pe.text, color: pe.color, t: now + delay, row });
+      }
+      if (next.remote) focusOn(e.k === 'move' ? e.path[e.path.length - 1] : e.at != null ? e.at : e.to);
+    }
+    A.pops = A.pops.filter((p) => now - p.t < 1500);
+    if (A.pops.some((p) => p.t > now)) lastDraw = 0;
+    A.fx = A.fx.filter((f) => now - f.t0 < f.dur);
+    for (const [i, t0] of A.fogFade) if (now - t0 > 600) A.fogFade.delete(i);
+  }
+
+  function liftPos(s, i) { const w = V.tileWorld(s, i); return { x: w.x, y: w.y + V.tileLift(s, i) }; }
+  function animState(now) {
+    const s = G.state;
+    const off = new Map(), ghosts = new Map(), hide = new Set(), fx = [];
+    const setOff = (uid, finalAt, pos, extra) => {
+      const f = liftPos(s, finalAt);
+      const o = Object.assign(off.get(uid) || {}, { dx: pos.x - f.x, dy: pos.y - f.y }, extra || {});
+      off.set(uid, o);
+    };
+    const finalOf = (uid) => {
+      if (s.units[uid]) return s.units[uid].at;
+      const g = [A.cur, ...A.queue].find((q) => q && q.e.k === 'die' && q.e.unit.id === uid);
+      return g ? g.e.at : null;
+    };
+    // units that die later in the queue stay visible until then
+    const dying = [A.cur, ...A.queue].filter((q) => q && q.e.k === 'die');
+    for (const q of dying) {
+      const e = q.e;
+      let alpha = 1;
+      if (q === A.cur) alpha = 1 - (now - q.t0) / q.dur;
+      const g = { unit: e.unit, dx: 0, dy: 0, alpha: Math.max(0, alpha) };
+      if (!ghosts.has(e.at)) ghosts.set(e.at, []);
+      ghosts.get(e.at).push(g);
+    }
+    const ghostOf = (uid) => { for (const [, l] of ghosts) for (const g of l) if (g.unit.id === uid) return g; return null; };
+    const apply = (uid, pos, extra) => {
+      const fa = finalOf(uid); if (fa == null) return;
+      const gh = ghostOf(uid);
+      if (gh && !s.units[uid]) { const f = liftPos(s, fa); gh.dx = pos.x - f.x; gh.dy = pos.y - f.y; Object.assign(gh, extra || {}); return; }
+      setOff(uid, fa, pos, extra);
+    };
+    // pending moves: show the unit where it started
+    const seenUnits = new Set();
+    for (const q of A.queue) {
+      const e = q.e;
+      if (e.k === 'train' && e.u && !seenUnits.has(e.u)) hide.add(e.u);
+      if (e.k === 'move' && !seenUnits.has(e.u)) { seenUnits.add(e.u); apply(e.u, liftPos(s, e.path[0])); }
+    }
+    const c = A.cur;
+    if (c) {
+      const e = c.e, k = Math.min(1, (now - c.t0) / (c.dur || 1));
+      if (e.k === 'move') {
+        const segs = e.path.length - 1;
+        const f = k * segs, si = Math.min(segs - 1, Math.floor(f)), sk = f - si;
+        const a = liftPos(s, e.path[si]), b = liftPos(s, e.path[si + 1]);
+        const hop = Math.sin(sk * Math.PI) * 4;
+        apply(e.u, { x: a.x + (b.x - a.x) * sk, y: a.y + (b.y - a.y) * sk - hop });
+      } else if (e.k === 'attack' || e.k === 'convert') {
+        const a = liftPos(s, e.from), b = liftPos(s, e.to);
+        const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+        if (e.k === 'attack' && !e.ranged) {
+          const lunge = Math.sin(Math.min(1, k * 1.6) * Math.PI) * 12;
+          apply(e.u, { x: a.x + dx / len * lunge, y: a.y + dy / len * lunge });
+        } else if (e.k === 'attack') {
+          const p = Math.min(1, k * 1.4);
+          const shooter = finalOf(e.u) != null ? (s.units[e.u] || (ghostOf(e.u) || {}).unit) : null;
+          const stone = shooter && shooter.type === 'catapult' && !shooter.boat;
+          const arc = Math.sin(p * Math.PI) * Math.min(40, len * 0.35);
+          const dArc = Math.cos(p * Math.PI) * Math.min(40, len * 0.35) * Math.PI;
+          if (p < 1) fx.push({ type: 'arrow', x: a.x + dx * p, y: a.y - 14 + dy * p - arc, ang: Math.atan2(dy - dArc, dx), stone });
+        } else {
+          fx.push({ type: 'beam', x1: a.x, y1: a.y - 22, x2: b.x, y2: b.y - 10, alpha: Math.sin(k * Math.PI) });
+        }
+        const hitK = e.k === 'attack' && !e.ranged ? 0.3 : 0.7;
+        if (k > hitK) {
+          const shake = Math.sin((k - hitK) * 60) * (1 - k) * 3;
+          const tgt = e.t;
+          const tf = finalOf(tgt);
+          if (tf != null && !seenUnits.has(tgt)) apply(tgt, { x: liftPos(s, tf).x + shake, y: liftPos(s, tf).y }, { flash: k - hitK < 0.15 });
+        }
+      } else if (e.k === 'train') {
+        if (e.u) apply(e.u, liftPos(s, e.at), { scale: Math.max(0.05, easeBack(k)) });
+        const p = liftPos(s, e.at);
+        fx.push({ type: 'ring', x: p.x, y: p.y, r: 6 + 20 * easeOut(k), alpha: 1 - k, color: '#ffffff' });
+      } else if (e.k === 'level' || e.k === 'capture') {
+        const p = liftPos(s, e.at);
+        const col = e.k === 'capture' ? R.colorOf(s, e.slot) : '#ffe08a';
+        fx.push({ type: 'ring', x: p.x, y: p.y, r: 8 + 34 * easeOut(k), alpha: 1 - k, color: col });
+        for (let n = 0; n < 8; n++) {
+          const ang = n * Math.PI / 4 + 0.3;
+          fx.push({ type: 'spark', x: p.x + Math.cos(ang) * 30 * easeOut(k), y: p.y - 10 + Math.sin(ang) * 14 * easeOut(k) - 20 * k, r: 2.2, alpha: 1 - k, color: col });
+        }
+      } else if (e.k === 'build' || e.k === 'heal') {
+        const p = liftPos(s, e.at);
+        const col = e.k === 'heal' ? '#8ef08a' : e.burn ? '#ff9a3c' : e.harvest ? '#fff3b0' : '#f6e7bf';
+        for (let n = 0; n < 7; n++) {
+          const ang = n * 0.9;
+          fx.push({ type: 'spark', x: p.x + Math.cos(ang) * 14 * k, y: p.y - 4 - 26 * easeOut(k) + Math.sin(ang) * 4, r: 2.4 * (1 - k * 0.5), alpha: 1 - k, color: col });
+        }
+      }
+    }
+    return { off, ghosts, hide, fx };
+  }
+
+  function trackReveals(before, after) {
+    if (G.me == null || !before || !after) return;
+    const a = R.P(before, G.me), b = R.P(after, G.me);
+    if (!a || !b) return;
+    const now = performance.now();
+    for (let i = 0; i < b.explored.length; i++) if (b.explored[i] === '1' && a.explored[i] !== '1') A.fogFade.set(i, now);
+  }
+  function fogAlphaMap(now) {
+    if (!A.fogFade.size) return null;
+    const m = new Map();
+    for (const [i, t0] of A.fogFade) m.set(i, Math.max(0, 1 - (now - t0) / 600));
+    return m;
+  }
+
+  // ---------- open & sync ----------
   async function openGameById(id) {
     try { const g = await fetchGame(id); if (!g) throw new Error('That game no longer exists'); openGame(g); }
     catch (e) { toast(errMsg(e)); }
@@ -1672,11 +2620,13 @@ window.TESSEL_CONFIG = {
 
   function openGame(g) {
     leaveChannels();
-    G.game = g; G.state = g.state; G.version = g.version;
+    if (!g.state || g.state.v !== 2) { toast('This game was made with an older version of Tessel and can’t be opened'); return goHome(); }
+    G.game = g; G.state = g.state; G.version = g.version; G.seenSeq = g.state.seq || 0;
     const mine = g.state.players.find((p) => p.userId === ME.id);
     G.me = mine ? mine.slot : null;
-    G.sel = null; G.selUnit = null; G.moves = null; G.attackIds = null; G.pops = [];
-    G.saving = false; G.dirty = false; G.pendingAdvance = false;
+    G.sel = null; G.selUnit = null; G.moves = null; G.attackIds = null; G.convertIds = null;
+    G.saving = false; G.dirty = false; G.pendingAdvance = false; G.camTarget = null;
+    A.queue = []; A.cur = null; A.pops = []; A.fx = []; A.fogFade.clear();
     show('game');
     resize();
     centerOnHome();
@@ -1687,6 +2637,7 @@ window.TESSEL_CONFIG = {
     channels.push(ch);
     timers.push(setInterval(tick, 500));
     timers.push(setInterval(() => { if (!isMyTurn()) pullGame(); }, 8000));
+    startLoop();
     if (g.status === 'finished' || g.state.winner != null) showGameOver();
     else maybeReward();
   }
@@ -1703,7 +2654,15 @@ window.TESSEL_CONFIG = {
     const turnBefore = G.state.turnSlot, wasOver = G.game.status === 'finished';
     const changed = g.version > G.version;
     G.game = g; G.version = g.version;
-    if (changed) { G.state = g.state; refreshSelection(); }
+    if (changed && g.state && g.state.v === 2) {
+      const before = G.state;
+      G.state = g.state;
+      const fresh = (g.state.events || []).filter((e) => e.seq > G.seenSeq && e.slot !== G.me);
+      if (fresh.length) playEvents(fresh, true);
+      G.seenSeq = g.state.seq || 0;
+      trackReveals(before, g.state);
+      refreshSelection();
+    }
     renderHUD();
     if (changed && turnBefore !== G.state.turnSlot && isMyTurn()) { toast('Your turn'); maybeReward(); }
     if (!wasOver && (g.status === 'finished' || G.state.winner != null)) showGameOver();
@@ -1727,7 +2686,7 @@ window.TESSEL_CONFIG = {
       if (error) {
         toast(error.message);
         G.dirty = false; G.pendingAdvance = false; G.saving = false;
-        G.version = -1; // accept whatever the server has
+        G.version = -1;
         await pullGame();
         return;
       }
@@ -1763,12 +2722,13 @@ window.TESSEL_CONFIG = {
   async function forceSkip() {
     try {
       const g = await fetchGame(G.game.id);
-      if (!g || g.status !== 'active') return;
+      if (!g || g.status !== 'active' || !g.state || g.state.v !== 2) return;
       const s = clone(g.state);
       if (s.turnSlot !== g.turn_slot) return;
       R.endTurn(s);
       const { error } = await sb.rpc('submit_turn', {
-        p_game: g.id, p_version: g.version, p_state: s, p_next_turn: s.turnSlot, p_advance: true, p_status: null, p_winner: null,
+        p_game: g.id, p_version: g.version, p_state: s, p_next_turn: s.turnSlot, p_advance: true,
+        p_status: s.winner != null ? 'finished' : null, p_winner: s.winner != null ? R.P(s, s.winner).userId : null,
       });
       if (!error) await pullGame();
     } catch { /* another device got there first */ }
@@ -1776,17 +2736,18 @@ window.TESSEL_CONFIG = {
 
   function act(fn, after) {
     if (!isMyTurn()) return false;
-    const st = clone(G.state);
-    let ev;
-    try { ev = fn(st) || []; } catch (e) { toast(e.message); return false; }
+    const before = G.state;
+    const st = clone(before);
+    const seq0 = st.seq || 0;
+    try { fn(st); } catch (e) { toast(e.message); return false; }
     G.state = st;
-    const now = performance.now();
-    ev.forEach((p) => G.pops.push(Object.assign({ t: now }, p)));
-    G.pops = G.pops.filter((p) => now - p.t < 1400);
+    playEvents(st.events.filter((e) => e.seq > seq0), false);
+    G.seenSeq = st.seq;
+    trackReveals(before, st);
     if (after) after();
     refreshSelection(); renderHUD();
     save(false);
-    if (st.winner != null) showGameOver();
+    if (st.winner != null) setTimeout(showGameOver, 900);
     else maybeReward();
     return true;
   }
@@ -1796,48 +2757,73 @@ window.TESSEL_CONFIG = {
     closeModal();
     const st = clone(G.state);
     R.endTurn(st);
+    G.seenSeq = st.seq;
     G.state = st; G.sel = null;
     refreshSelection(); renderHUD();
     save(true);
     if (st.winner != null) showGameOver();
   }
 
-  // ---------- camera & input ----------
+  // ---------- camera, loop & input ----------
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = cv.clientWidth; H = cv.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    requestDraw();
   }
-  function clampCam() {
+  function clampCam(c = G.cam) {
     if (!G.state) return;
     const N = G.state.size;
-    G.cam.x = Math.max(-N * V.HW, Math.min(N * V.HW, G.cam.x));
-    G.cam.y = Math.max(-V.HH * 2, Math.min(2 * N * V.HH, G.cam.y));
-    G.cam.z = Math.max(0.45, Math.min(2.6, G.cam.z));
+    c.x = Math.max(-N * V.HW, Math.min(N * V.HW, c.x));
+    c.y = Math.max(-V.HH * 2, Math.min(2 * N * V.HH, c.y));
+    if (c.z != null) c.z = Math.max(0.45, Math.min(2.6, c.z));
   }
   function centerOnHome() {
     const s = G.state;
-    const cities = Object.values(s.cities).filter((c) => c.owner === G.me);
+    const cities = R.citiesOf(s, G.me);
     const c = cities.find((x) => x.capital) || cities[0];
     const w = c ? V.tileWorld(s, c.at) : { x: 0, y: (s.size - 1) * V.HH };
     G.cam.x = w.x; G.cam.y = w.y + 20;
     G.cam.z = Math.max(0.7, Math.min(1.5, Math.min(W, H) / 420));
     clampCam();
   }
+  function focusOn(i) {
+    if (i == null || !G.state) return;
+    const [sx, sy] = V.tileScreen(G.state, i, G.cam, W, H);
+    if (sx > W * 0.15 && sx < W * 0.85 && sy > H * 0.18 && sy < H * 0.62) return;
+    const w = V.tileWorld(G.state, i);
+    G.camTarget = { x: w.x, y: w.y + 40 / G.cam.z };
+    clampCam(G.camTarget);
+  }
 
-  let drawQueued = false;
-  function requestDraw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(frame); } }
-  function frame() {
-    drawQueued = false;
-    if (!G.state || $('#game').hidden) return;
+  let looping = false, lastDraw = 0;
+  function startLoop() {
+    if (looping) return;
+    looping = true;
+    requestAnimationFrame(frame);
+  }
+  function requestDraw() { lastDraw = 0; startLoop(); }
+  function frame(now) {
+    if (!G.state || $('#game').hidden) { looping = false; return; }
+    requestAnimationFrame(frame);
+    stepAnim(now);
+    const busy = animating() || A.pops.length || A.fogFade.size || G.camTarget || drag;
+    if (!busy && now - lastDraw < 40) return;
+    lastDraw = now;
+    if (G.camTarget) {
+      G.cam.x += (G.camTarget.x - G.cam.x) * 0.14;
+      G.cam.y += (G.camTarget.y - G.cam.y) * 0.14;
+      if (Math.hypot(G.camTarget.x - G.cam.x, G.camTarget.y - G.cam.y) < 1) G.camTarget = null;
+    }
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, '#1a5570'); g.addColorStop(1, '#123a4d');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    V.drawWorld(ctx, G.state, { viewer: G.me, cam: G.cam, W, H, sel: G.sel, moves: G.moves, attackIds: G.attackIds, pops: G.pops });
-    const now = performance.now();
-    if (G.pops.some((p) => now - p.t < 1300)) requestDraw();
+    const anim = animState(now);
+    const quiet = animating();
+    V.drawWorld(ctx, G.state, {
+      viewer: G.me, cam: G.cam, W, H, time: now, anim, pops: A.pops, fogFade: fogAlphaMap(now),
+      sel: G.sel, moves: quiet ? null : G.moves, attackIds: quiet ? null : G.attackIds, convertIds: quiet ? null : G.convertIds,
+    });
   }
 
   const ptrs = new Map();
@@ -1846,6 +2832,7 @@ window.TESSEL_CONFIG = {
     cv.addEventListener('pointerdown', (e) => {
       cv.setPointerCapture(e.pointerId);
       ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      G.camTarget = null;
       if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, cx: G.cam.x, cy: G.cam.y, moved: false };
       else if (ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
@@ -1889,24 +2876,31 @@ window.TESSEL_CONFIG = {
       clampCam(); requestDraw();
     }, { passive: false });
     window.addEventListener('resize', () => {
-      if (!$('#game').hidden) resize();
+      if (!$('#game').hidden) { resize(); requestDraw(); }
       document.querySelectorAll('[data-hero]').forEach((c) => { if (!c.closest('.screen').hidden) drawHero(c); });
     });
     window.addEventListener('keydown', (e) => {
       if ($('#game').hidden || e.target.closest('input,select')) return;
-      if (e.key === 'Escape') { if (G.modal) closeModal(); else { G.sel = null; refreshSelection(); } }
+      if (e.key === 'Escape') { if (G.modal && G.modal !== 'reward') closeModal(); else { G.sel = null; refreshSelection(); } }
     });
   }
 
-  function hasTileInfo(s, i) { const T = s.tiles[i]; return !!(T.city || T.r); }
+  function hasTileInfo(s, i) { const T = s.tiles[i]; return !!(T.city || T.r || T.b || T.ruin || T.road); }
 
   function onTap(px, py) {
     const s = G.state;
     const i = V.pick(s, G.cam, W, H, px, py, G.me);
     if (i == null || (G.me != null && !R.isExplored(s, G.me, i))) { G.sel = null; refreshSelection(); return; }
-    if (G.selUnit && isMyTurn()) {
+    if (G.selUnit && isMyTurn() && !animating()) {
       const u = s.units[G.selUnit];
-      const target = R.unitAt(s, i);
+      // a tap on any sprite that is a valid target wins over whatever stands in front of it
+      const hit = V.pickAll(s, G.cam, W, H, px, py, G.me).map((x) => R.unitAt(s, x.i))
+        .find((x) => x && ((G.attackIds && G.attackIds.has(x.id)) || (G.convertIds && G.convertIds.has(x.id))));
+      const target = hit || R.unitAt(s, i);
+      if (u && target && G.convertIds && G.convertIds.has(target.id)) {
+        act((st) => R.actConvert(st, G.me, u.id, target.id), () => { G.sel = u.at; G.focus = 'unit'; });
+        return;
+      }
       if (u && target && G.attackIds && G.attackIds.has(target.id)) {
         act((st) => R.actAttack(st, G.me, u.id, target.id), () => {
           const nu = G.state.units[u.id];
@@ -1931,7 +2925,7 @@ window.TESSEL_CONFIG = {
 
   function refreshSelection() {
     const s = G.state;
-    G.moves = null; G.attackIds = null; G.selUnit = null;
+    G.moves = null; G.attackIds = null; G.convertIds = null; G.selUnit = null;
     if (s && G.sel != null) {
       const u = R.unitAt(s, G.sel);
       if (G.focus === 'unit' && !u) G.focus = 'tile';
@@ -1940,6 +2934,7 @@ window.TESSEL_CONFIG = {
         if (isMyTurn() && u.owner === G.me) {
           G.moves = R.moveTargets(s, u);
           G.attackIds = new Set(R.attackTargets(s, u).map((x) => x.id));
+          G.convertIds = new Set(R.convertTargets(s, u).map((x) => x.id));
         }
       }
     }
@@ -1959,7 +2954,7 @@ window.TESSEL_CONFIG = {
     else if (isMyTurn()) t = 'Your turn';
     else t = `${cur ? cur.name : 'Someone'} is playing`;
     $('#hudTurn').textContent = t;
-    $('#hudRound').textContent = s.round;
+    $('#hudRound').textContent = s.mode === 'perfection' ? `${Math.min(s.round, s.maxRound)}/${s.maxRound}` : s.round;
     $('#hudScore').textContent = me ? R.score(s, G.me).toLocaleString() : '–';
     const end = $('#btnEnd');
     end.disabled = !isMyTurn();
@@ -1967,100 +2962,155 @@ window.TESSEL_CONFIG = {
     tick();
   }
 
-  function actBtn(label, cost, err, onclick, go) {
+  function actBtn(label, cost, err, onclick, go, gain) {
     return h('button', { class: 'act' + (go && !err ? ' go' : ''), disabled: !!err, onclick },
-      h('span', {}, label), cost ? h('span', { class: 'cost' }, '★ ' + cost) : null, err ? h('small', {}, err) : null);
+      h('span', {}, label),
+      cost ? h('span', { class: 'cost' }, '★ ' + cost) : gain ? h('span', { class: 'cost' }, 'Get ★ ' + gain) : null,
+      err ? h('small', {}, err) : null);
+  }
+  const ownerName = (s, slot) => (slot === G.me ? 'Your' : `${R.P(s, slot).name}’s`);
+
+  function unitPanel(s, u, toggle) {
+    const kids = [];
+    const st = R.stats(s, u), own = u.owner === G.me, mine = isMyTurn();
+    const base = R.UNITS[u.type];
+    const title = u.boat ? `${st.name} (${base.name})` : base.name;
+    kids.push(h('div', { class: 'phead' }, h('span', { class: 'dot', style: 'background:' + R.colorOf(s, u.owner) }), h('h3', {}, title), toggle));
+    kids.push(h('p', { class: 'sub' }, `${ownerName(s, u.owner)} unit${u.vet ? ', veteran' : ''}${u.kills ? `, ${u.kills} ${u.kills === 1 ? 'kill' : 'kills'}` : ''}`));
+    kids.push(h('div', { class: 'statrow' },
+      h('span', { class: 'stat' }, 'Health', h('b', {}, `${u.hp}/${R.maxHp(u)}`)),
+      h('span', { class: 'stat' }, 'Attack', h('b', {}, st.atk)),
+      h('span', { class: 'stat' }, 'Defence', h('b', {}, st.def)),
+      h('span', { class: 'stat' }, 'Move', h('b', {}, st.mv)),
+      h('span', { class: 'stat' }, 'Range', h('b', {}, st.rng))));
+    if (st.skills.length) kids.push(h('div', { class: 'skills' }, st.skills.map((k) => h('span', { class: 'skill', title: R.SKILL_INFO[k] }, R.SKILL_INFO[k].split(':')[0]))));
+    if (own && mine) {
+      const acts = [];
+      const T = s.tiles[u.at];
+      if (T.city && s.cities[T.city].owner !== G.me) acts.push(actBtn('Capture', 0, R.canCapture(s, u) ? null : u.boat ? 'Land first' : 'Next turn', () => act((x) => R.actCapture(x, G.me, u.id)), true));
+      if (T.ruin) acts.push(actBtn('Examine ruins', 0, R.canExamine(s, u) ? null : 'Already acted', () => act((x) => R.actExamine(x, G.me, u.id)), true));
+      if (R.canPromote(s, u)) acts.push(actBtn('Promote', 0, null, () => act((x) => R.actPromote(x, G.me, u.id)), true));
+      if (u.hp < R.maxHp(u)) acts.push(actBtn('Recover', 0, R.canRecover(s, u) ? null : 'Only before acting', () => act((x) => R.actRecover(x, G.me, u.id))));
+      if (R.hasSkill(s, u, 'heal')) {
+        const hurt = R.around(s.size, u.at, 1).some((j) => { const x = R.unitAt(s, j); return x && x.owner === G.me && x.hp < R.maxHp(x); });
+        acts.push(actBtn('Heal others', 0, u.acted || u.attacked ? 'Already acted' : hurt ? null : 'No hurt units nearby', () => act((x) => R.actHeal(x, G.me, u.id))));
+      }
+      if (u.boat && u.boat !== 'battleship') {
+        const { next, err } = R.upgradeCheck(s, G.me, u);
+        acts.push(actBtn('Upgrade to ' + R.BOATS[next].name.toLowerCase(), R.BOATS[next].cost, err, () => act((x) => R.actUpgrade(x, G.me, u.id))));
+      }
+      if (R.has(s, G.me, 'freespirit')) acts.push(actBtn('Disband', 0, u.acted ? 'Already acted' : null, () => { if (confirm('Disband this unit for half its cost?')) act((x) => R.actDisband(x, G.me, u.id), () => { G.focus = 'tile'; }); }, false, Math.floor(base.cost / 2)));
+      if (acts.length) kids.push(h('div', { class: 'acts' }, acts));
+      let hint;
+      if (R.isDone(s, u)) hint = 'This unit is done for the turn.';
+      else {
+        const bits = [];
+        if (G.moves && G.moves.size) bits.push('tap a dot to move');
+        if (G.attackIds && G.attackIds.size) bits.push('tap a red ring to attack');
+        if (G.convertIds && G.convertIds.size) bits.push('tap a purple ring to convert');
+        hint = bits.length ? bits[0][0].toUpperCase() + bits.join(', ').slice(1) + '.' : 'No moves from here right now.';
+      }
+      kids.push(h('p', { class: 'hint' }, hint));
+      if (G.attackIds && G.attackIds.size) {
+        const previews = [...G.attackIds].map((id) => {
+          const o = s.units[id], r = R.combat(s, u, o);
+          return `${R.stats(s, o).name}: deal ${r.dmg}${r.kills ? ' (defeats it)' : ''}${r.ret ? `, take ${r.ret}` : ''}`;
+        });
+        kids.push(h('p', { class: 'hint' }, previews.join('. ') + '.'));
+      }
+    }
+    return kids;
+  }
+
+  function cityPanel(s, c, toggle) {
+    const kids = [];
+    if (c.owner == null) {
+      kids.push(h('div', { class: 'phead' }, h('h3', {}, c.name), toggle));
+      kids.push(h('p', { class: 'sub', style: 'margin:0' }, 'A village. Move a unit onto it, then capture it on that unit’s next turn.'));
+      return kids;
+    }
+    const own = c.owner === G.me;
+    kids.push(h('div', { class: 'phead' }, h('span', { class: 'dot', style: 'background:' + R.colorOf(s, c.owner) }), h('h3', {}, c.name), toggle));
+    kids.push(h('p', { class: 'sub' }, `${ownerName(s, c.owner)} ${c.capital ? 'capital' : 'city'}, level ${c.level}${c.connected ? ', connected to the capital' : ''}`));
+    kids.push(h('div', { class: 'statrow' },
+      h('span', { class: 'stat' }, 'Income', h('b', {}, '★ ' + R.cityIncome(s, c))),
+      h('span', { class: 'stat' }, 'Growth', h('b', {}, `${c.pop}/${c.level + 1}`)),
+      h('span', { class: 'stat' }, 'Units', h('b', {}, `${R.homeCount(s, c.id)}/${c.level + 1}`)),
+      c.wall ? h('span', { class: 'stat' }, 'Walled') : null,
+      c.workshop ? h('span', { class: 'stat' }, 'Workshop') : null,
+      c.park ? h('span', { class: 'stat' }, 'Park') : null));
+    if (own && isMyTurn()) {
+      kids.push(h('div', { class: 'acts' }, R.TRAINABLE.map((k) => {
+        const err = R.trainCheck(s, G.me, c.id, k);
+        return actBtn(R.UNITS[k].name, R.UNITS[k].cost, err, () => act((x) => R.actTrain(x, G.me, c.id, k), () => { G.focus = 'unit'; }));
+      })));
+      kids.push(h('p', { class: 'hint' }, 'New units can act next turn. Harvest and build around the city to grow it.'));
+    }
+    return kids;
+  }
+
+  function tilePanel(s, i, toggle) {
+    const kids = [];
+    const T = s.tiles[i], own = R.tileOwner(s, i), mine = isMyTurn();
+    const title = T.b ? R.BUILDINGS[T.b].name : T.ruin ? 'Ruins' : T.r ? R.RESOURCE_NAME[T.r] : T.road ? 'Road' : R.TERRAIN_NAME[T.t];
+    kids.push(h('div', { class: 'phead' }, h('h3', {}, title), toggle));
+    const where = own == null ? 'Unclaimed' : own === G.me ? `Inside ${s.cities[T.terr].name}’s borders` : `${R.P(s, own).name}’s land`;
+    let extra = '';
+    if (T.b && R.BUILDINGS[T.b].temple) extra = ` Temple level ${T.bl || 1}, grows every 3 turns.`;
+    else if (T.b && R.BUILDINGS[T.b].adj) extra = ` Level ${T.bl || 0}.`;
+    else if (T.b === 'market') extra = ` Gives ★ ${R.marketIncome(s, i)} per turn.`;
+    else if (T.b && R.BUILDINGS[T.b].monument) extra = ' A monument.';
+    else if (T.ruin) extra = ' Move a unit here to examine them.';
+    kids.push(h('p', { class: 'sub' }, `${R.TERRAIN_NAME[T.t]}${T.road ? ' with a road' : ''}. ${where}.${extra}`));
+    if (mine && G.me != null) {
+      const acts = [];
+      const hv = T.r && !T.b ? R.HARVEST[T.r] : null;
+      if (hv) acts.push(actBtn(hv.name, hv.cost, R.harvestCheck(s, G.me, i), () => act((x) => R.actHarvest(x, G.me, i)), true, hv.gain));
+      if (own === G.me) {
+        for (const k of R.BUILD_ORDER) {
+          const B = R.BUILDINGS[k];
+          if (!B.on(T)) continue;
+          if (B.monument && !R.has(s, G.me, B.tech)) continue;
+          if (B.monument && R.P(s, G.me).monuments.includes(k)) continue;
+          acts.push(actBtn(B.name, B.cost, R.buildCheck(s, G.me, i, k), () => act((x) => R.actBuild(x, G.me, i, k)), true));
+        }
+        for (const k of ['clear', 'burn', 'grow']) {
+          const F = R.TERRAFORM[k];
+          if (!R.has(s, G.me, F.tech)) continue;
+          const err = R.terraformCheck(s, G.me, i, k);
+          if (err === 'Not possible here') continue;
+          acts.push(actBtn(F.name, F.cost, err, () => act((x) => R.actTerraform(x, G.me, i, k)), false, F.gain));
+        }
+      }
+      if (R.has(s, G.me, 'roads') && !T.road && !T.city && !R.isWater(T.t) && T.t !== 'mountain' && (own == null || own === G.me)) {
+        acts.push(actBtn('Road', 3, R.roadCheck(s, G.me, i), () => act((x) => R.actRoad(x, G.me, i))));
+      }
+      if (acts.length) kids.push(h('div', { class: 'acts' }, acts));
+      else if (own !== G.me && (T.r || R.BUILD_ORDER.some((k) => R.BUILDINGS[k].on(T) && !R.BUILDINGS[k].monument))) kids.push(h('p', { class: 'hint' }, 'Only tiles inside your borders can be harvested or built on.'));
+    }
+    const needs = { mountain: 'climbing', ocean: 'sailing' }[T.t];
+    if (needs && G.me != null && !R.has(s, G.me, needs)) kids.push(h('p', { class: 'hint' }, T.t === 'ocean' ? 'Only ships and battleships can sail the ocean (Sailing).' : 'Units need Climbing to enter.'));
+    if (T.t === 'water' && !T.b) kids.push(h('p', { class: 'hint' }, 'Land units embark at a port you own.'));
+    return kids;
   }
 
   function renderPanel() {
     const p = $('#panel'), s = G.state;
     if (!s) return;
-    const mine = isMyTurn();
     if (G.sel == null) {
       const cur = R.P(s, s.turnSlot);
       p.replaceChildren(h('p', { class: 'ph', style: 'margin:0' },
-        s.winner != null ? 'The game is over.' : mine ? 'Tap a unit, city or tile. Drag to look around, pinch to zoom.' : `Waiting for ${cur ? cur.name : 'the next player'}. You can look around meanwhile.`));
+        s.winner != null ? 'The game is over.' : isMyTurn() ? 'Tap a unit, city or tile. Drag to look around, pinch to zoom.' : `Waiting for ${cur ? cur.name : 'the next player'}. Their moves will play here as they happen.`));
       return;
     }
     const i = G.sel, T = s.tiles[i], u = R.unitAt(s, i);
     const toggle = u && hasTileInfo(s, i)
       ? h('button', { class: 'chip', onclick: () => { G.focus = G.focus === 'unit' ? 'tile' : 'unit'; refreshSelection(); } }, G.focus === 'unit' ? 'Show tile' : 'Show unit')
       : null;
-    const kids = [];
-
-    if (G.focus === 'unit' && u) {
-      const st = R.stats(s, u), b = R.UNITS[u.type], own = u.owner === G.me, owner = R.P(s, u.owner);
-      kids.push(h('div', { class: 'phead' }, h('span', { class: 'dot', style: 'background:' + R.colorOf(s, u.owner) }),
-        h('h3', {}, st.boat ? `${b.name} boat` : b.name), toggle));
-      kids.push(h('p', { class: 'sub' }, own ? 'Your unit' : `${owner.name}’s unit`));
-      kids.push(h('div', { class: 'statrow' },
-        h('span', { class: 'stat' }, 'Health', h('b', {}, `${u.hp}/${b.hp}`)),
-        h('span', { class: 'stat' }, 'Attack', h('b', {}, st.atk)),
-        h('span', { class: 'stat' }, 'Defence', h('b', {}, st.def)),
-        h('span', { class: 'stat' }, 'Move', h('b', {}, st.mv)),
-        h('span', { class: 'stat' }, 'Range', h('b', {}, st.rng))));
-      if (own && mine) {
-        const acts = [];
-        if (s.tiles[u.at].city && s.cities[s.tiles[u.at].city].owner !== G.me) {
-          acts.push(actBtn('Capture', 0, R.canCapture(s, u) ? null : 'Wait until next turn', () => act((x) => R.actCapture(x, G.me, u.id)), true));
-        }
-        if (u.hp < b.hp) acts.push(actBtn('Recover', 0, R.canRecover(s, u) ? null : 'Only before moving', () => act((x) => R.actRecover(x, G.me, u.id))));
-        if (acts.length) kids.push(h('div', { class: 'acts' }, acts));
-        let hint = '';
-        if (u.moved && u.attacked) hint = 'This unit is done for the turn.';
-        else {
-          const bits = [];
-          if (G.moves && G.moves.size) bits.push('tap a dot to move');
-          if (G.attackIds && G.attackIds.size) bits.push('tap a ringed enemy to attack');
-          hint = bits.length ? bits[0][0].toUpperCase() + bits.join(', or ').slice(1) + '.' : 'Nowhere to move from here.';
-        }
-        kids.push(h('p', { class: 'hint' }, hint));
-        if (G.attackIds && G.attackIds.size) {
-          const previews = [...G.attackIds].map((id) => {
-            const o = s.units[id], r = R.combat(s, u, o);
-            return `${R.UNITS[o.type].name}: deal ${r.dmg}${r.kills ? ' (defeats it)' : ''}${r.ret ? `, take ${r.ret}` : ''}`;
-          });
-          kids.push(h('p', { class: 'hint' }, previews.join('. ') + '.'));
-        }
-      }
-    } else if (T.city) {
-      const c = s.cities[T.city];
-      if (c.owner == null) {
-        kids.push(h('div', { class: 'phead' }, h('h3', {}, c.name), toggle));
-        kids.push(h('p', { class: 'sub', style: 'margin:0' }, 'A village. Move a unit onto it, then capture it at the start of that unit’s next move.'));
-      } else {
-        const own = c.owner === G.me, owner = R.P(s, c.owner);
-        kids.push(h('div', { class: 'phead' }, h('span', { class: 'dot', style: 'background:' + R.colorOf(s, c.owner) }),
-          h('h3', {}, c.name), toggle));
-        kids.push(h('p', { class: 'sub' }, `${own ? 'Your' : owner.name + '’s'} ${c.capital ? 'capital' : 'city'}, level ${c.level}`));
-        kids.push(h('div', { class: 'statrow' },
-          h('span', { class: 'stat' }, 'Income', h('b', {}, '★ ' + R.cityIncome(c))),
-          h('span', { class: 'stat' }, 'Growth', h('b', {}, `${c.pop}/${c.level + 1}`)),
-          h('span', { class: 'stat' }, 'Units', h('b', {}, `${R.homeCount(s, c.id)}/${c.level + 1}`)),
-          c.wall ? h('span', { class: 'stat' }, 'Walled') : null,
-          c.workshop ? h('span', { class: 'stat' }, 'Workshop') : null));
-        if (own && mine) {
-          kids.push(h('div', { class: 'acts' }, R.TRAINABLE.map((k) => {
-            const err = R.trainCheck(s, G.me, c.id, k);
-            return actBtn(R.UNITS[k].name, R.UNITS[k].cost, err, () => act((x) => R.actTrain(x, G.me, c.id, k), () => { G.focus = 'unit'; }));
-          })));
-          kids.push(h('p', { class: 'hint' }, 'New units can act next turn. Harvest nearby resources to grow the city.'));
-        }
-      }
-    } else {
-      const own = R.tileOwner(s, i);
-      kids.push(h('div', { class: 'phead' }, h('h3', {}, T.r ? R.RESOURCE_NAME[T.r] : R.TERRAIN_NAME[T.t]), toggle));
-      const where = own == null ? 'Unclaimed' : own === G.me ? `Inside ${s.cities[T.terr].name}’s borders` : `${R.P(s, own).name}’s land`;
-      kids.push(h('p', { class: 'sub' }, `${R.TERRAIN_NAME[T.t]}. ${where}.`));
-      const hv = R.HARVEST[T.r];
-      if (hv && mine) {
-        const err = R.harvestCheck(s, G.me, i);
-        kids.push(h('div', { class: 'acts' }, actBtn(hv.name, hv.cost, err, () => act((x) => R.actHarvest(x, G.me, i)), true)));
-        kids.push(h('p', { class: 'hint' }, `Adds ${hv.pop} population to the city that owns this tile.`));
-      }
-      const needs = { mountain: 'climbing', water: 'fishing', ocean: 'sailing' }[T.t];
-      if (needs && G.me != null && !R.has(s, G.me, needs)) kids.push(h('p', { class: 'hint' }, `Units need ${R.TECHS[needs].name} to enter.`));
-    }
+    let kids;
+    if (G.focus === 'unit' && u) kids = unitPanel(s, u, toggle);
+    else if (T.city) kids = cityPanel(s, s.cities[T.city], toggle);
+    else kids = tilePanel(s, i, toggle);
     p.replaceChildren(...kids);
   }
 
@@ -2080,17 +3130,22 @@ window.TESSEL_CONFIG = {
     const s = G.state;
     if (G.me == null) return;
     const p = R.P(s, G.me);
-    const grid = h('div', { class: 'techgrid' }, R.BRANCHES.map((br) => h('div', { class: 'branch' }, br.map((k) => {
+    const card = (k) => {
       const t = R.TECHS[k], st = R.techState(s, G.me, k), cost = R.techCost(s, G.me, k);
       const can = st === 'open' && isMyTurn() && p.stars >= cost;
       return h('button', {
-        class: 'tech ' + st, disabled: !can,
+        class: 'tech ' + st + ' tier' + t.tier, disabled: !can,
         onclick: () => { if (act((x) => R.actResearch(x, G.me, k))) openTech(); },
-      }, h('b', {}, t.name), h('span', {}, t.desc),
+      }, h('b', {}, t.name), h('span', {}, t.unlocks),
       h('em', {}, st === 'known' ? 'Learned' : st === 'locked' ? 'After ' + R.TECHS[t.req].name : '★ ' + cost));
-    }))));
+    };
+    const grid = h('div', { class: 'techtree' }, R.BRANCHES.map(([root, a, b]) => h('div', { class: 'branch' },
+      card(root),
+      h('div', { class: 'twigs' },
+        h('div', { class: 'twig' }, card(a[0]), card(a[1])),
+        h('div', { class: 'twig' }, card(b[0]), card(b[1]))))));
     const note = h('p', { class: 'muted', style: 'margin:12px 0 0' },
-      `You have ★ ${p.stars}. Each new city makes research a little more expensive.`);
+      `You have ★ ${p.stars}. Tech costs tier × cities + 4${R.has(s, G.me, 'philosophy') ? ', a third off with Philosophy' : ''}.`);
     modal('tech', 'Tech tree', h('div', {}, grid, note));
   }
 
@@ -2101,30 +3156,34 @@ window.TESSEL_CONFIG = {
     const r = p.rewards[0], c = G.state.cities[r.city];
     const opts = R.rewardOptions(r.level);
     const body = h('div', {},
-      h('p', { class: 'muted' }, `Pick one reward for the city.`),
+      h('p', { class: 'muted' }, 'Pick one reward for the city.'),
       h('div', { class: 'rewards' }, opts.map((k) => h('button', {
         class: 'reward',
         onclick: () => { closeModal(); act((x) => R.actReward(x, G.me, k)); },
       }, h('b', {}, R.REWARD_INFO[k].name), h('span', {}, R.REWARD_INFO[k].desc)))));
-    modal('reward', `${c ? c.name : 'A city'} reached level ${r.level}`, body, false);
+    setTimeout(() => {
+      if (!isMyTurn() || G.modal === 'reward' || !R.P(G.state, G.me).rewards.length) return;
+      modal('reward', `${c ? c.name : 'A city'} reached level ${r.level}`, body, false);
+    }, animating() ? 700 : 0);
   }
 
   function scoreList() {
     const s = G.state;
     const rows = s.players.slice().sort((a, b) => R.score(s, b.slot) - R.score(s, a.slot));
     return h('ul', { class: 'scores' }, rows.map((p) => {
-      const cities = Object.values(s.cities).filter((c) => c.owner === p.slot).length;
+      const cities = R.citiesOf(s, p.slot).length;
       return h('li', {}, h('span', { class: 'dot', style: 'background:' + R.TRIBES[p.tribe].color }),
         h('span', { class: 'n' }, p.name, p.slot === G.me ? ' (you)' : '', ' ',
-          h('span', { class: 'out' }, p.alive ? `${R.TRIBES[p.tribe].name}, ${cities} ${cities === 1 ? 'city' : 'cities'}` : 'Defeated')),
+          h('span', { class: 'out' }, p.alive ? `${R.TRIBES[p.tribe].name}, ${cities} ${cities === 1 ? 'city' : 'cities'}, ${p.techs.length} tech` : 'Defeated')),
         h('b', {}, R.score(s, p.slot).toLocaleString()));
     }));
   }
 
   function openScores() {
-    const lim = G.game.settings.turnLimit;
+    const s = G.state, lim = G.game.settings.turnLimit;
+    const goal = s.mode === 'perfection' ? `Perfection: highest score after ${s.maxRound} rounds wins.` : 'Domination: capture every rival city to win.';
     modal('scores', G.game.name, h('div', {}, scoreList(),
-      h('p', { class: 'muted', style: 'margin:0' }, `Game code ${G.game.code}. ${lim ? fmtLimit(lim) + ' per turn' : 'No turn limit'}. Capture every rival city to win.`)));
+      h('p', { class: 'muted', style: 'margin:0' }, `${goal} Game code ${G.game.code}. ${lim ? fmtLimit(lim) + ' per turn' : 'No turn limit'}.`)));
   }
 
   function showGameOver() {
@@ -2142,11 +3201,11 @@ window.TESSEL_CONFIG = {
     $('#btnEnd').addEventListener('click', () => {
       if (!isMyTurn()) return;
       const s = G.state;
-      const idle = Object.values(s.units).filter((u) => u.owner === G.me && !u.moved).length;
+      const idle = Object.values(s.units).filter((u) => u.owner === G.me && !u.moved && !u.acted).length;
       if (idle && !confirm(`${idle} ${idle === 1 ? 'unit hasn’t' : 'units haven’t'} moved yet. End your turn anyway?`)) return;
       endMyTurn();
     });
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && G.game && !$('#game').hidden) pullGame(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && G.game && !$('#game').hidden) { pullGame(); startLoop(); } });
   }
 
   // ---------- boot ----------
@@ -2155,7 +3214,6 @@ window.TESSEL_CONFIG = {
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { requestDraw(); document.querySelectorAll('[data-hero]').forEach((c) => { if (!c.closest('.screen').hidden) drawHero(c); }); });
     if (!sb) { show('setup'); return; }
     sb.auth.onAuthStateChange((event, session) => {
-      // run outside the auth callback so Supabase calls inside don't deadlock
       setTimeout(() => {
         if (session && session.user) onSignedIn(session.user);
         else if (event === 'SIGNED_OUT') { ME.id = null; leaveChannels(); show('auth'); }
@@ -2167,6 +3225,7 @@ window.TESSEL_CONFIG = {
   }
   boot();
 })();
+
 </script>
 </body>
 </html>
